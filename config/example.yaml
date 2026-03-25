@@ -1,0 +1,8 @@
+tickers:
+  - AAPL
+  - MSFT
+  - AMZN
+benchmark: SPY
+start_date: "2019-01-01"
+end_date: "2025-01-01"
+output_dir: "artifacts"
