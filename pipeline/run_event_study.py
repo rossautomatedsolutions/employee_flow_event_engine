@@ -7,13 +7,11 @@ from src.pipeline.run_event_study import run_first_pass_event_study
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run first-pass ESPP event study experiment")
-    parser.add_argument("--years", type=int, default=5, help="Price history length in years (bounded to 2..5)")
-    parser.add_argument("--benchmark", type=str, default="SPY", help="Benchmark ticker for abnormal returns")
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/first_pass"), help="Output directory")
+    parser = argparse.ArgumentParser(description="Run ESPP strategy hypothesis testing experiment")
+    parser.add_argument("--config", type=Path, default=Path("config/example.yaml"), help="Path to YAML experiment config")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    run_first_pass_event_study(years=args.years, output_dir=args.output_dir, benchmark=args.benchmark)
+    run_first_pass_event_study(config_path=args.config)

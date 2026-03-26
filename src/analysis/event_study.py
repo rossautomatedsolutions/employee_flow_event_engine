@@ -119,6 +119,7 @@ def run_event_study(
 
     prices["ret"] = daily_returns(prices["close"])
     benchmark["ret"] = daily_returns(benchmark["close"])
+    prices["benchmark_ret"] = benchmark["ret"].reindex(prices.index).fillna(0.0)
     prices["abret"] = abnormal_returns(prices["ret"], benchmark["ret"]).reindex(prices.index)
     prices["cum_ret"] = prices["ret"].cumsum()
     prices["cum_abret"] = prices["abret"].fillna(0.0).cumsum()
@@ -140,8 +141,8 @@ def run_event_study(
         for key, value in meta.items():
             window[key] = value
         rows.extend(
-            window[["event_id", "event_date", "tau", "ret", "abret", "cum_ret", "cum_abret", "vol_ratio"] + [c for c in meta.keys() if c in window.columns]]
-            .rename(columns={"ret": "raw_ret", "abret": "abnormal_ret"})
+            window[["event_id", "event_date", "tau", "close", "ret", "benchmark_ret", "abret", "cum_ret", "cum_abret", "vol_ratio"] + [c for c in meta.keys() if c in window.columns]]
+            .rename(columns={"ret": "raw_ret", "abret": "abnormal_ret", "close": "close_price"})
             .to_dict("records")
         )
 
