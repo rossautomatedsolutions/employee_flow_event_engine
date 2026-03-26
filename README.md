@@ -7,8 +7,10 @@
 - Loads historical OHLCV data (currently via `yfinance`, through a swappable provider interface).
 - Parses filing text (10-K / DEF 14A style documents) for ESPP clues.
 - Generates approximate ESPP event dates.
-- Runs event studies over `t-10` to `t+10` windows.
-- Produces abnormal-return summaries, volume spike metrics, CSV outputs, and simple plots.
+- Runs event studies over configurable windows (default `t-10` to `t+10`).
+- Filters for tradable candidates (volume spike threshold + minimum ESPP confidence).
+- Simulates an event strategy (default: enter `t+1` close, exit `t+5` close) and compares to a baseline.
+- Produces abnormal-return summaries, cross-sectional slices, strategy metrics, CSV outputs, and simple plots.
 
 ## Project layout
 
@@ -39,10 +41,7 @@ pip install -e .
 python -m src.pipeline.run_event_study --config config/example.yaml
 ```
 
-Example config includes three tickers:
-- `AAPL`
-- `MSFT`
-- `AMZN`
+Example config includes ticker metadata (market cap + employees) for cross-sectional grouping.
 
 ## Outputs
 
@@ -52,7 +51,11 @@ Under `artifacts/` (or configured output dir):
 - `<ticker>/event_panel.csv`
 - `<ticker>/aar_summary.csv`
 - `<ticker>/aar_plot.png`
-- `combined_aar_summary.csv`
+- `filtered_event_windows.csv`
+- `ticker_cross_section.csv`
+- `strategy_event_level.csv`
+- `strategy_group_summary.csv`
+- `strategy_overall_summary.csv`
 
 ## Determinism and reproducibility notes
 

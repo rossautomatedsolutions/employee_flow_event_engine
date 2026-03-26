@@ -3,44 +3,49 @@ from __future__ import annotations
 import argparse
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+import yaml
 
 from src.analysis.event_study import EventStudyConfig, run_event_study
+from src.analysis.strategy import (
+    CrossSectionConfig,
+    StrategyConfig,
+    assign_cross_sectional_groups,
+    filter_event_panel,
+    simulate_strategy,
+)
 from src.data.price_loader import YFinancePriceLoader, persist_prices
 from src.data.sec_parser import FilingDocument, parse_many_espp_hints
 from src.events.espp_event_extractor import estimate_event_dates
 
 LOGGER = logging.getLogger("pipeline.event_study")
-DEFAULT_UNIVERSE = ["AAPL", "MSFT", "AMZN", "CRM", "NVDA"]
+
+
+@dataclass(slots=True)
+class TickerConfig:
+    ticker: str
+    market_cap: float
+    employees: int
 
 
 @dataclass(slots=True)
 class ExperimentConfig:
-    tickers: list[str]
+    tickers: list[TickerConfig]
     benchmark: str
     start_date: date
     end_date: date
     output_dir: Path
+    event_study: EventStudyConfig
+    strategy: StrategyConfig
+    cross_section: CrossSectionConfig
 
 
 def _configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-
-
-def _build_config(years: int, output_dir: Path, benchmark: str) -> ExperimentConfig:
-    bounded_years = max(2, min(5, years))
-    end_date = date.today()
-    start_date = end_date - timedelta(days=bounded_years * 365)
-    return ExperimentConfig(
-        tickers=DEFAULT_UNIVERSE,
-        benchmark=benchmark,
-        start_date=start_date,
-        end_date=end_date,
-        output_dir=output_dir,
-    )
 
 
 def _mock_filings(ticker: str, start_year: int, end_year: int) -> list[FilingDocument]:
@@ -61,63 +66,80 @@ def _mock_filings(ticker: str, start_year: int, end_year: int) -> list[FilingDoc
     return filings
 
 
-def _summarize_metrics(all_events: pd.DataFrame) -> pd.DataFrame:
-    horizons = [1, 3, 5]
-    rows: list[dict[str, float]] = []
+def _parse_date(value: str, field: str) -> date:
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ValueError(f"Invalid {field}: {value!r}. Expected YYYY-MM-DD") from exc
 
-    for horizon in horizons:
-        per_event = (
-            all_events[all_events["tau"].between(1, horizon)]
-            .groupby(["ticker", "event_id"], as_index=False)
-            .agg(
-                horizon_return=("raw_ret", "sum"),
-                horizon_abnormal_return=("abnormal_ret", "sum"),
-                avg_volume_ratio=("vol_ratio", "mean"),
-            )
+
+def _load_config(config_path: Path) -> ExperimentConfig:
+    raw = yaml.safe_load(config_path.read_text())
+
+    tickers = [
+        TickerConfig(
+            ticker=str(item["ticker"]),
+            market_cap=float(item["market_cap"]),
+            employees=int(item["employees"]),
         )
-        if per_event.empty:
-            continue
+        for item in raw["tickers"]
+    ]
 
-        rows.append(
-            {
-                "horizon": float(horizon),
-                "avg_return": float(per_event["horizon_return"].mean()),
-                "avg_abnormal_return": float(per_event["horizon_abnormal_return"].mean()),
-                "volume_spike_indicator": float((per_event["avg_volume_ratio"] > 1.25).mean()),
-                "n_events": float(len(per_event)),
-            }
-        )
+    event_cfg = raw.get("event_study", {})
+    strategy_cfg = raw.get("strategy", {})
+    cross_cfg = raw.get("cross_section", {})
 
-    return pd.DataFrame(rows)
-
-
-def _interpret_signal(summary: pd.DataFrame) -> str:
-    if summary.empty:
-        return "Insufficient event coverage: no detectable signal yet."
-
-    horizon_values = {int(row["horizon"]): row for _, row in summary.iterrows()}
-    h1 = horizon_values.get(1)
-    h3 = horizon_values.get(3)
-    h5 = horizon_values.get(5)
-    if h1 is None or h3 is None or h5 is None:
-        return "Incomplete horizon coverage: first-pass signal is inconclusive."
-
-    sell_pressure = h1["avg_return"] < 0 and h3["avg_return"] <= 0
-    rebound = h1["avg_return"] < 0 and h5["avg_return"] > h1["avg_return"]
-
-    return (
-        f"Sell pressure evidence: {'YES' if sell_pressure else 'NO'} | "
-        f"Rebound evidence: {'YES' if rebound else 'NO'} | "
-        "Interpret with caution (heuristic event dates, first-pass sample)."
+    return ExperimentConfig(
+        tickers=tickers,
+        benchmark=str(raw["benchmark"]),
+        start_date=_parse_date(raw["start_date"], "start_date"),
+        end_date=_parse_date(raw["end_date"], "end_date"),
+        output_dir=Path(raw.get("output_dir", "artifacts/first_pass")),
+        event_study=EventStudyConfig(
+            window_before=int(event_cfg.get("window_before", 10)),
+            window_after=int(event_cfg.get("window_after", 10)),
+            volume_lookback=int(event_cfg.get("volume_lookback", 20)),
+            label="espp",
+        ),
+        strategy=StrategyConfig(
+            entry_tau=int(strategy_cfg.get("entry_tau", 1)),
+            exit_tau=int(strategy_cfg.get("exit_tau", 5)),
+            volume_spike_threshold=float(strategy_cfg.get("volume_spike_threshold", 1.25)),
+            min_confidence=float(strategy_cfg.get("min_confidence", 0.7)),
+        ),
+        cross_section=CrossSectionConfig(
+            market_cap_bins=tuple(cross_cfg.get("market_cap_bins", [2e10, 2e11])),
+            volatility_bins=tuple(cross_cfg.get("volatility_bins", [0.015, 0.03])),
+            employee_heavy_threshold=int(cross_cfg.get("employee_heavy_threshold", 100_000)),
+        ),
     )
 
 
-def run_first_pass_event_study(years: int, output_dir: Path, benchmark: str) -> None:
+def _ticker_meta_frame(config: ExperimentConfig, panel: pd.DataFrame) -> pd.DataFrame:
+    vol = (
+        panel.groupby("ticker", as_index=False)["raw_ret"]
+        .std(ddof=1)
+        .rename(columns={"raw_ret": "daily_volatility"})
+        .fillna({"daily_volatility": 0.0})
+    )
+    meta = pd.DataFrame([{"ticker": t.ticker, "market_cap": t.market_cap, "employees": t.employees} for t in config.tickers])
+    merged = meta.merge(vol, on="ticker", how="left").fillna({"daily_volatility": 0.0})
+    return assign_cross_sectional_groups(merged, config.cross_section)
+
+
+def _persist_strategy_outputs(output_dir: Path, artifacts: Any) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    artifacts.event_level.to_csv(output_dir / "strategy_event_level.csv", index=False)
+    artifacts.group_summary.to_csv(output_dir / "strategy_group_summary.csv", index=False)
+    artifacts.overall_summary.to_csv(output_dir / "strategy_overall_summary.csv", index=False)
+
+
+def run_first_pass_event_study(config_path: Path) -> None:
     _configure_logging()
-    config = _build_config(years=years, output_dir=output_dir, benchmark=benchmark)
+    config = _load_config(config_path)
     LOGGER.info(
-        "Running ESPP first-pass study for %s from %s to %s",
-        ", ".join(config.tickers),
+        "Running ESPP strategy experiment for %s from %s to %s",
+        ", ".join(t.ticker for t in config.tickers),
         config.start_date.isoformat(),
         config.end_date.isoformat(),
     )
@@ -125,16 +147,12 @@ def run_first_pass_event_study(years: int, output_dir: Path, benchmark: str) -> 
     loader = YFinancePriceLoader()
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        benchmark_prices = loader.load_daily_ohlcv(config.benchmark, config.start_date, config.end_date)
-    except ValueError as exc:
-        LOGGER.error("Unable to load benchmark %s: %s", config.benchmark, exc)
-        return
+    benchmark_prices = loader.load_daily_ohlcv(config.benchmark, config.start_date, config.end_date)
     persist_prices(benchmark_prices, config.output_dir / "benchmark_prices.csv")
 
     all_event_rows: list[pd.DataFrame] = []
-
-    for ticker in config.tickers:
+    for ticker_cfg in config.tickers:
+        ticker = ticker_cfg.ticker
         LOGGER.info("[%s] loading prices", ticker)
         try:
             prices = loader.load_daily_ohlcv(ticker, config.start_date, config.end_date)
@@ -151,17 +169,18 @@ def run_first_pass_event_study(years: int, output_dir: Path, benchmark: str) -> 
             price_frame=prices,
             benchmark_frame=benchmark_prices,
             events=events,
-            config=EventStudyConfig(window_before=10, window_after=10, label=ticker),
+            config=EventStudyConfig(
+                window_before=config.event_study.window_before,
+                window_after=config.event_study.window_after,
+                volume_lookback=config.event_study.volume_lookback,
+                label=ticker,
+            ),
         )
-
         if result.panel.empty:
-            LOGGER.warning("[%s] no usable event windows", ticker)
             continue
-
         ticker_panel = result.panel.copy()
         ticker_panel["ticker"] = ticker
         all_event_rows.append(ticker_panel)
-        LOGGER.info("[%s] events used: %s", ticker, int(ticker_panel["event_id"].nunique()))
 
     if not all_event_rows:
         LOGGER.warning("No event windows generated across universe.")
@@ -170,26 +189,31 @@ def run_first_pass_event_study(years: int, output_dir: Path, benchmark: str) -> 
     all_events = pd.concat(all_event_rows, ignore_index=True)
     all_events.to_csv(config.output_dir / "all_event_windows.csv", index=False)
 
-    summary = _summarize_metrics(all_events)
-    summary.to_csv(config.output_dir / "summary_report.csv", index=False)
+    filtered_events = filter_event_panel(all_events, config.strategy)
+    filtered_events.to_csv(config.output_dir / "filtered_event_windows.csv", index=False)
 
-    interpretation = _interpret_signal(summary)
-    print("\n=== ESPP First-Pass Summary ===")
-    print(summary.to_string(index=False))
-    print("\nInterpretation:")
-    print(interpretation)
-    print("\nFirst-pass answer: Is there any detectable signal?")
-    print("- " + interpretation)
+    ticker_groups = _ticker_meta_frame(config, all_events)
+    ticker_groups.to_csv(config.output_dir / "ticker_cross_section.csv", index=False)
+
+    strategy_artifacts = simulate_strategy(filtered_events, ticker_groups, config.strategy)
+    _persist_strategy_outputs(config.output_dir, strategy_artifacts)
+
+    if strategy_artifacts.overall_summary.empty:
+        print("No tradable events after filters.")
+        return
+
+    print("\n=== Strategy Hypothesis Testing Summary ===")
+    print(strategy_artifacts.overall_summary.to_string(index=False))
+    print("\n=== Cross-Section Group Summary ===")
+    print(strategy_artifacts.group_summary.to_string(index=False))
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run first-pass ESPP event study experiment")
-    parser.add_argument("--years", type=int, default=5, help="Price history length in years (bounded to 2..5)")
-    parser.add_argument("--benchmark", type=str, default="SPY", help="Benchmark ticker for abnormal returns")
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/first_pass"), help="Output directory")
+    parser = argparse.ArgumentParser(description="Run ESPP strategy hypothesis testing experiment")
+    parser.add_argument("--config", type=Path, default=Path("config/example.yaml"), help="Path to YAML experiment config")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    run_first_pass_event_study(years=args.years, output_dir=args.output_dir, benchmark=args.benchmark)
+    run_first_pass_event_study(config_path=args.config)
