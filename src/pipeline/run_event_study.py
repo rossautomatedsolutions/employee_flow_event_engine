@@ -231,21 +231,34 @@ def _run_diagnostic_report(panel: pd.DataFrame, output_dir: Path) -> None:
     )
     ticker_summary.to_csv(output_dir / "diagnostic_summary_by_ticker.csv", index=False)
 
-    print("\n=== Diagnostic Report (All Events) ===")
-    print("Distribution of returns (t+1, t+3, t+5):")
-    print(_format_summary_for_display(all_summary).to_string(index=False))
+    print("\n=== Event Study Diagnostics ===")
+    if all_summary.empty:
+        print("No event returns available for diagnostic summary.")
+        return
 
-    print("\nHistogram of returns:")
-    for horizon in horizons:
-        horizon_vals = all_dist.loc[all_dist["horizon"] == float(horizon), "return"]
-        print(f"\n t+{horizon}")
-        hist = _histogram_table(horizon_vals)
-        if hist.empty:
-            print("  no data")
-            continue
-        print(hist.to_string(index=False))
+    horizon_indexed = all_summary.set_index("horizon")
+    avg_t1 = float(horizon_indexed.loc[1.0, "mean"]) if 1.0 in horizon_indexed.index else float("nan")
+    avg_t3 = float(horizon_indexed.loc[3.0, "mean"]) if 3.0 in horizon_indexed.index else float("nan")
+    avg_t5 = float(horizon_indexed.loc[5.0, "mean"]) if 5.0 in horizon_indexed.index else float("nan")
 
-    print("\nSummary table by ticker:")
+    hit_t1 = float(horizon_indexed.loc[1.0, "hit_rate_positive"]) if 1.0 in horizon_indexed.index else float("nan")
+    hit_t3 = float(horizon_indexed.loc[3.0, "hit_rate_positive"]) if 3.0 in horizon_indexed.index else float("nan")
+    hit_t5 = float(horizon_indexed.loc[5.0, "hit_rate_positive"]) if 5.0 in horizon_indexed.index else float("nan")
+
+    event_count = int(all_dist.loc[all_dist["horizon"] == 1.0, "event_id"].nunique())
+
+    print("Average returns:")
+    print(f"  t+1: {avg_t1:+.2%}")
+    print(f"  t+3: {avg_t3:+.2%}")
+    print(f"  t+5: {avg_t5:+.2%}")
+
+    print("\nHit rate (% positive returns):")
+    print(f"  t+1: {hit_t1:.1%}")
+    print(f"  t+3: {hit_t3:.1%}")
+    print(f"  t+5: {hit_t5:.1%}")
+
+    print(f"\nEvents used: {event_count}")
+
     by_ticker = (
         all_dist.groupby(["ticker", "horizon"], as_index=False)["return"]
         .agg(
@@ -257,8 +270,15 @@ def _run_diagnostic_report(panel: pd.DataFrame, output_dir: Path) -> None:
         )
         .sort_values(["ticker", "horizon"], ignore_index=True)
     )
-    by_ticker_display = _format_summary_for_display(by_ticker)
-    print(by_ticker_display.to_string(index=False))
+    t1_by_ticker = by_ticker[by_ticker["horizon"] == 1.0][["ticker", "mean"]].copy()
+    t1_by_ticker["mean"] = t1_by_ticker["mean"].map(lambda x: f"{x:+.2%}")
+    t1_by_ticker = t1_by_ticker.rename(columns={"mean": "avg_t+1_return"})
+
+    print("\nPer-ticker average return at t+1:")
+    if t1_by_ticker.empty:
+        print("  no data")
+    else:
+        print(t1_by_ticker.to_string(index=False))
 
     conclusion = _diagnostic_conclusion(all_summary)
     print(f"\nConclusion: {conclusion}")
