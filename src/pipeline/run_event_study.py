@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -134,6 +135,135 @@ def _persist_strategy_outputs(output_dir: Path, artifacts: Any) -> None:
     artifacts.overall_summary.to_csv(output_dir / "strategy_overall_summary.csv", index=False)
 
 
+def _horizon_returns(panel: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    rows: list[dict[str, float | str]] = []
+    for (ticker, event_id), event_slice in panel.groupby(["ticker", "event_id"]):
+        horizon_window = event_slice[event_slice["tau"].between(1, horizon)]["raw_ret"].astype(float)
+        if len(horizon_window) < horizon:
+            continue
+        rows.append(
+            {
+                "ticker": str(ticker),
+                "event_id": float(event_id),
+                "horizon": float(horizon),
+                "return": float((1.0 + horizon_window).prod() - 1.0),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _distribution_summary(distribution: pd.DataFrame) -> pd.DataFrame:
+    if distribution.empty:
+        return pd.DataFrame()
+
+    grouped = distribution.groupby("horizon", as_index=False)
+    return grouped["return"].agg(
+        n_events="count",
+        mean="mean",
+        median="median",
+        std=lambda x: x.std(ddof=1),
+        hit_rate_positive=lambda x: (x > 0.0).mean(),
+    )
+
+
+def _histogram_table(values: pd.Series, bins: int = 10) -> pd.DataFrame:
+    clean = values.astype(float).dropna()
+    if clean.empty:
+        return pd.DataFrame()
+    counts, edges = np.histogram(clean, bins=bins)
+    rows = []
+    for idx, count in enumerate(counts):
+        rows.append(
+            {
+                "bin": f"[{edges[idx]:+.2%}, {edges[idx + 1]:+.2%})",
+                "count": int(count),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _format_summary_for_display(summary: pd.DataFrame) -> pd.DataFrame:
+    if summary.empty:
+        return summary
+    formatted = summary.copy()
+    formatted["horizon"] = formatted["horizon"].astype(int).map(lambda h: f"t+{h}")
+    formatted["mean"] = formatted["mean"].map(lambda x: f"{x:+.2%}")
+    formatted["median"] = formatted["median"].map(lambda x: f"{x:+.2%}")
+    formatted["std"] = formatted["std"].fillna(0.0).map(lambda x: f"{x:.2%}")
+    formatted["hit_rate_positive"] = formatted["hit_rate_positive"].map(lambda x: f"{x:.1%}")
+    return formatted
+
+
+def _diagnostic_conclusion(summary: pd.DataFrame) -> str:
+    if summary.empty:
+        return "no detectable pattern"
+
+    means = summary["mean"].astype(float)
+    hit_rates = summary["hit_rate_positive"].astype(float)
+    strong_sell_pressure = bool((means < -0.003).all() and (hit_rates < 0.45).all())
+    no_pattern = bool((means.abs() < 0.001).all() and hit_rates.between(0.45, 0.55).all())
+
+    if strong_sell_pressure:
+        return "evidence of sell pressure"
+    if no_pattern:
+        return "no detectable pattern"
+    return "mixed results"
+
+
+def _run_diagnostic_report(panel: pd.DataFrame, output_dir: Path) -> None:
+    horizons = [1, 3, 5]
+    all_dist = pd.concat([_horizon_returns(panel, h) for h in horizons], ignore_index=True)
+    all_summary = _distribution_summary(all_dist)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    all_dist.to_csv(output_dir / "diagnostic_returns_distribution.csv", index=False)
+    all_summary.to_csv(output_dir / "diagnostic_summary_overall.csv", index=False)
+    ticker_summary = (
+        all_dist.groupby(["ticker", "horizon"], as_index=False)["return"]
+        .agg(
+            n_events="count",
+            mean="mean",
+            median="median",
+            std=lambda x: x.std(ddof=1),
+            hit_rate_positive=lambda x: (x > 0.0).mean(),
+        )
+        .sort_values(["ticker", "horizon"], ignore_index=True)
+    )
+    ticker_summary.to_csv(output_dir / "diagnostic_summary_by_ticker.csv", index=False)
+
+    print("\n=== Diagnostic Report (All Events) ===")
+    print("Distribution of returns (t+1, t+3, t+5):")
+    print(_format_summary_for_display(all_summary).to_string(index=False))
+
+    print("\nHistogram of returns:")
+    for horizon in horizons:
+        horizon_vals = all_dist.loc[all_dist["horizon"] == float(horizon), "return"]
+        print(f"\n t+{horizon}")
+        hist = _histogram_table(horizon_vals)
+        if hist.empty:
+            print("  no data")
+            continue
+        print(hist.to_string(index=False))
+
+    print("\nSummary table by ticker:")
+    by_ticker = (
+        all_dist.groupby(["ticker", "horizon"], as_index=False)["return"]
+        .agg(
+            n_events="count",
+            mean="mean",
+            median="median",
+            std=lambda x: x.std(ddof=1),
+            hit_rate_positive=lambda x: (x > 0.0).mean(),
+        )
+        .sort_values(["ticker", "horizon"], ignore_index=True)
+    )
+    by_ticker_display = _format_summary_for_display(by_ticker)
+    print(by_ticker_display.to_string(index=False))
+
+    conclusion = _diagnostic_conclusion(all_summary)
+    print(f"\nConclusion: {conclusion}")
+
+
 def run_first_pass_event_study(config_path: Path) -> None:
     _configure_logging()
     config = _load_config(config_path)
@@ -188,6 +318,7 @@ def run_first_pass_event_study(config_path: Path) -> None:
 
     all_events = pd.concat(all_event_rows, ignore_index=True)
     all_events.to_csv(config.output_dir / "all_event_windows.csv", index=False)
+    _run_diagnostic_report(all_events, config.output_dir)
 
     filtered_events = filter_event_panel(all_events, config.strategy)
     filtered_events.to_csv(config.output_dir / "filtered_event_windows.csv", index=False)
