@@ -606,3 +606,83 @@ def test_load_config_and_offline_pipeline_use_csv_price_provider(monkeypatch: py
     assert "2025-01-02" in all_events["event_date"].astype(str).tolist()
     assert "2025-01-01" not in all_events["event_date"].astype(str).tolist()
     assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()
+
+
+def _guard_yfinance_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_import = builtins.__import__
+
+    def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "yfinance":
+            raise AssertionError("yfinance should not be imported for offline CSV pipeline runs")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+
+def _write_temp_config_from_repo_fixture(template_path: Path, output_dir: Path, tmp_path: Path) -> Path:
+    config_text = template_path.read_text(encoding="utf-8")
+    updated = config_text.replace(
+        'output_dir: "artifacts/offline_business_day_example"',
+        f'output_dir: "{output_dir.as_posix()}"',
+    )
+    temp_config = tmp_path / template_path.name
+    temp_config.write_text(updated, encoding="utf-8")
+    return temp_config
+
+
+def test_business_day_price_fixture_contains_only_business_day_rows() -> None:
+    fixture_path = Path("fixtures/prices/research_business_day_prices.csv")
+    prices = pd.read_csv(fixture_path, parse_dates=["date"])
+
+    assert not prices.empty
+    assert prices["date"].dt.dayofweek.lt(5).all()
+    assert set(prices["date"].dt.strftime("%Y-%m-%d")) == {
+        "2024-06-28",
+        "2024-07-01",
+        "2024-07-02",
+        "2024-12-30",
+        "2024-12-31",
+        "2025-01-02",
+        "2025-01-03",
+    }
+
+
+def test_offline_business_day_config_runs_without_live_market_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    template_path = Path("config/offline_business_day_example.yaml")
+    output_dir = tmp_path / "artifacts"
+    config_path = _write_temp_config_from_repo_fixture(template_path, output_dir, tmp_path)
+
+    config = _load_config(config_path)
+    loader = _build_price_data_provider(config)
+    assert isinstance(loader, CSVPriceLoader)
+
+    _guard_yfinance_import(monkeypatch)
+    run_first_pass_event_study(config_path)
+
+    audit = pd.read_csv(output_dir / "espp_date_audit.csv")
+    status_counts = audit["review_status"].value_counts().to_dict()
+    assert status_counts["corrected"] == 2
+    assert status_counts["accepted"] == 1
+    assert status_counts["rejected"] == 3
+    assert "unreviewed" not in status_counts
+
+    all_events = pd.read_csv(output_dir / "all_event_windows.csv")
+    assert sorted(set(all_events["event_date"].astype(str))) == ["2024-07-01", "2024-12-31", "2025-01-02"]
+    assert sorted(audit.loc[audit["included_in_event_study"], "effective_event_date"].dropna().tolist()) == [
+        "2024-07-01",
+        "2024-12-31",
+        "2025-01-02",
+    ]
+    rejected_fallbacks = audit[
+        (audit["ticker"] == "AAPL")
+        & (audit["derivation_rule"] == "fallback_default_anchors")
+        & (audit["assigned_event_date"].isin(["2025-06-30", "2025-12-31"]))
+    ].sort_values("assigned_event_date", ignore_index=True)
+    assert rejected_fallbacks["review_status"].tolist() == ["rejected", "rejected"]
+    assert rejected_fallbacks["included_in_event_study"].tolist() == [False, False]
+    assert rejected_fallbacks["review_note"].str.contains("Manual research exclusion", regex=False).all()
+    assert "2024-06-30" not in all_events["event_date"].astype(str).tolist()
+    assert "2025-01-01" not in all_events["event_date"].astype(str).tolist()
+    assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()
+    assert "2025-06-30" not in all_events["event_date"].astype(str).tolist()
+    assert "2025-12-31" not in all_events["event_date"].astype(str).tolist()

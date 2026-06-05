@@ -1,0 +1,7 @@
+event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note
+AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day,AAPL,2024-06-30,2024-07-01,corrected,Manual review shifts the weekend-assigned date onto the next business-day price row
+AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|12-31|2024-12-31|filing_text_month_day,AAPL,2024-12-31,,accepted,Year-end date already aligns to a business-day price row in this fixture
+AAPL|na|na|default_anchor_aapl_2025_0630|06-30|2025-06-30|fallback_default_anchors,AAPL,2025-06-30,,rejected,Manual research exclusion for out-of-sample fallback anchor in the business-day smoke fixture
+AAPL|na|na|default_anchor_aapl_2025_1231|12-31|2025-12-31|fallback_default_anchors,AAPL,2025-12-31,,rejected,Manual research exclusion for out-of-sample fallback anchor in the business-day smoke fixture
+CRM|10-K|2024-03-01|crm_2024_10k_fixture|07-01|2024-07-01|filing_text_month_day,CRM,2024-07-01,,rejected,Rejected duplicate summer signal for this business-day smoke replay
+CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day,CRM,2025-01-01,2025-01-02,corrected,Manual review shifts the holiday-assigned date onto the next business-day price row

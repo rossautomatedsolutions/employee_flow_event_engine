@@ -52,6 +52,13 @@ The example run is fully local/reproducible today:
 
 That means the current example config is suitable for fully offline Research v0.1 replay. The legacy live path still exists if you explicitly switch `price_source` back to `yfinance`.
 
+Research v0.1 includes two offline replay configs:
+
+- [`config/example.yaml`](C:/GitHub/employee_flow_event_engine/config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
+- [`config/offline_business_day_example.yaml`](C:/GitHub/employee_flow_event_engine/config/offline_business_day_example.yaml) is the slightly more market-calendar-realistic offline replay and uses business-day-only price rows plus manual review corrections that move non-business assigned dates onto business-day `effective_event_date` values. It also uses explicit manual review rejections to exclude irrelevant fallback anchors so the smoke-run audit stays focused on the tiny fixture window.
+
+Both configs remain research fixtures for offline replay and decision support. They are not production ESPP date validation.
+
 Example config includes:
 
 - `price_source: csv`
