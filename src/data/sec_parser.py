@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Iterable
+
+import yaml
 
 ESPP_KEYWORDS = [
     "employee stock purchase plan",
@@ -26,6 +29,9 @@ class FilingDocument:
     filing_type: str
     filing_date: date
     text: str
+    source_fixture_path: str | None = None
+    source_id: str | None = None
+    source_kind: str = "fixture"
 
 
 @dataclass(slots=True)
@@ -36,6 +42,63 @@ class ESPPFilingHint:
     confidence: float
     snippets: list[str]
     month_day_candidates: list[tuple[int, int]]
+    source_fixture_path: str | None = None
+    source_id: str | None = None
+    source_kind: str = "fixture"
+
+
+def _coerce_date(value: object, field: str) -> date:
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ValueError(f"Invalid {field}: {value!r}. Expected YYYY-MM-DD") from exc
+
+
+def _coerce_fixture_records(raw: object, fixture_path: Path) -> list[dict[str, object]]:
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        return [record for record in raw if isinstance(record, dict)]
+    raise ValueError(f"Unsupported fixture structure in {fixture_path}")
+
+
+def load_filing_documents_from_fixtures(root: Path, ticker: str | None = None) -> list[FilingDocument]:
+    """Load local filing fixtures from YAML files for deterministic research runs."""
+
+    if not root.exists():
+        return []
+
+    documents: list[FilingDocument] = []
+    for fixture_path in sorted(root.rglob("*.y*ml")):
+        raw = yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
+        if raw is None:
+            continue
+        for record in _coerce_fixture_records(raw, fixture_path):
+            doc_ticker = str(record["ticker"])
+            if ticker is not None and doc_ticker != ticker:
+                continue
+            documents.append(
+                FilingDocument(
+                    ticker=doc_ticker,
+                    filing_type=str(record["filing_type"]),
+                    filing_date=_coerce_date(record["filing_date"], "filing_date"),
+                    text=str(record["text"]),
+                    source_fixture_path=str(fixture_path),
+                    source_id=str(record.get("source_id") or fixture_path.stem),
+                    source_kind="fixture",
+                )
+            )
+
+    return sorted(
+        documents,
+        key=lambda doc: (
+            doc.ticker,
+            doc.filing_date,
+            doc.filing_type,
+            doc.source_id or "",
+            doc.source_fixture_path or "",
+        ),
+    )
 
 
 def _to_month_number(name: str) -> int:
@@ -84,6 +147,9 @@ def extract_espp_hints(document: FilingDocument) -> ESPPFilingHint:
         confidence=confidence,
         snippets=snippets,
         month_day_candidates=deduped,
+        source_fixture_path=document.source_fixture_path,
+        source_id=document.source_id,
+        source_kind=document.source_kind,
     )
 
 

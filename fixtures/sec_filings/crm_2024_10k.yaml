@@ -1,0 +1,7 @@
+ticker: CRM
+filing_type: 10-K
+filing_date: "2024-03-01"
+source_id: crm_2024_10k_fixture
+text: |
+  The employee stock purchase plan has recurring purchase dates on January 1 and July 1.
+  Each offering period resets after the scheduled purchase date.

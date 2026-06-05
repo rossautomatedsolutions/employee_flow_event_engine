@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -19,9 +19,9 @@ from src.analysis.strategy import (
     filter_event_panel,
     simulate_strategy,
 )
-from src.data.price_loader import YFinancePriceLoader, persist_prices
-from src.data.sec_parser import FilingDocument, parse_many_espp_hints
-from src.events.espp_event_extractor import estimate_event_dates
+from src.data.price_loader import PriceDataProvider, build_price_loader, persist_prices
+from src.data.sec_parser import FilingDocument, load_filing_documents_from_fixtures, parse_many_espp_hints
+from src.events.espp_event_extractor import ESPPEvent, estimate_event_dates_with_audit
 
 LOGGER = logging.getLogger("pipeline.event_study")
 
@@ -40,6 +40,10 @@ class ExperimentConfig:
     start_date: date
     end_date: date
     output_dir: Path
+    price_source: str
+    price_data_path: Path | None
+    filing_fixture_dir: Path | None
+    review_file: Path | None
     event_study: EventStudyConfig
     strategy: StrategyConfig
     cross_section: CrossSectionConfig
@@ -62,9 +66,57 @@ def _mock_filings(ticker: str, start_year: int, end_year: int) -> list[FilingDoc
                 filing_type="10-K",
                 filing_date=date(year, 2, 15),
                 text=text,
+                source_id=f"mock_{ticker.lower()}_{year}_10k",
+                source_kind="mock",
             )
         )
     return filings
+
+
+def _load_filings_for_ticker(config: ExperimentConfig, ticker: str) -> list[FilingDocument]:
+    if config.filing_fixture_dir is not None:
+        docs = load_filing_documents_from_fixtures(config.filing_fixture_dir, ticker=ticker)
+        if docs:
+            LOGGER.info("[%s] loaded %s local filing fixture(s)", ticker, len(docs))
+            return docs
+        LOGGER.warning(
+            "[%s] no local filing fixtures found under %s; falling back to mock filings",
+            ticker,
+            config.filing_fixture_dir,
+        )
+    return _mock_filings(ticker, config.start_date.year, config.end_date.year)
+
+
+def _persist_date_audit(output_dir: Path, audit_frames: list[pd.DataFrame]) -> None:
+    audit_columns = [
+        "ticker",
+        "filing_type",
+        "filing_date",
+        "source_fixture_path",
+        "source_id",
+        "source_snippet",
+        "candidate_month_day",
+        "assigned_event_date",
+        "derivation_rule",
+        "confidence",
+        "fallback_anchor_used",
+        "event_review_id",
+        "review_status",
+        "reviewed_event_date",
+        "review_note",
+        "effective_event_date",
+        "included_in_event_study",
+    ]
+    if audit_frames:
+        audit = pd.concat(audit_frames, ignore_index=True)
+        audit = audit.reindex(columns=audit_columns).sort_values(
+            ["ticker", "assigned_event_date", "candidate_month_day", "source_id"],
+            ignore_index=True,
+        )
+    else:
+        audit = pd.DataFrame(columns=audit_columns)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    audit.to_csv(output_dir / "espp_date_audit.csv", index=False)
 
 
 def _parse_date(value: str, field: str) -> date:
@@ -72,6 +124,10 @@ def _parse_date(value: str, field: str) -> date:
         return date.fromisoformat(str(value))
     except ValueError as exc:
         raise ValueError(f"Invalid {field}: {value!r}. Expected YYYY-MM-DD") from exc
+
+
+def _build_price_data_provider(config: ExperimentConfig) -> PriceDataProvider:
+    return build_price_loader(price_source=config.price_source, price_data_path=config.price_data_path)
 
 
 def _load_config(config_path: Path) -> ExperimentConfig:
@@ -96,6 +152,10 @@ def _load_config(config_path: Path) -> ExperimentConfig:
         start_date=_parse_date(raw["start_date"], "start_date"),
         end_date=_parse_date(raw["end_date"], "end_date"),
         output_dir=Path(raw.get("output_dir", "artifacts/first_pass")),
+        price_source=str(raw.get("price_source", "yfinance")),
+        price_data_path=Path(raw["price_data_path"]) if raw.get("price_data_path") else None,
+        filing_fixture_dir=Path(raw["filings"]["fixture_dir"]) if raw.get("filings", {}).get("fixture_dir") else None,
+        review_file=Path(raw["reviews"]["review_file"]) if raw.get("reviews", {}).get("review_file") else None,
         event_study=EventStudyConfig(
             window_before=int(event_cfg.get("window_before", 10)),
             window_after=int(event_cfg.get("window_after", 10)),
@@ -114,6 +174,172 @@ def _load_config(config_path: Path) -> ExperimentConfig:
             employee_heavy_threshold=int(cross_cfg.get("employee_heavy_threshold", 100_000)),
         ),
     )
+
+
+def _empty_review_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "ticker",
+            "event_review_id",
+            "original_assigned_event_date",
+            "reviewed_event_date",
+            "review_status",
+            "review_note",
+        ]
+    )
+
+
+def _load_event_date_reviews(review_file: Path | None) -> pd.DataFrame:
+    if review_file is None or not review_file.exists():
+        return _empty_review_frame()
+
+    reviews = pd.read_csv(review_file, dtype=str).fillna("")
+    if "event_review_id" not in reviews.columns:
+        reviews["event_review_id"] = ""
+
+    required = {"ticker", "original_assigned_event_date", "reviewed_event_date", "review_status", "review_note", "event_review_id"}
+    missing = required.difference(reviews.columns)
+    if missing:
+        raise ValueError(f"Review file missing required columns: {sorted(missing)}")
+
+    allowed_statuses = {"accepted", "corrected", "rejected"}
+    reviews["review_status"] = reviews["review_status"].str.strip().str.lower()
+    reviews["event_review_id"] = reviews["event_review_id"].str.strip()
+    invalid_statuses = sorted(set(reviews["review_status"]).difference(allowed_statuses))
+    if invalid_statuses:
+        raise ValueError(f"Review file has invalid review_status values: {invalid_statuses}")
+
+    reviews["ticker"] = reviews["ticker"].str.strip()
+    reviews["original_assigned_event_date"] = reviews["original_assigned_event_date"].map(
+        lambda value: _parse_date(value, "original_assigned_event_date").isoformat() if value else ""
+    )
+    reviews["reviewed_event_date"] = reviews["reviewed_event_date"].map(lambda value: _parse_date(value, "reviewed_event_date").isoformat() if value else "")
+    corrected_without_date = reviews[(reviews["review_status"] == "corrected") & (reviews["reviewed_event_date"] == "")]
+    if not corrected_without_date.empty:
+        raise ValueError("Corrected review rows require reviewed_event_date")
+
+    missing_keys = reviews[(reviews["event_review_id"] == "") & (reviews["original_assigned_event_date"] == "")]
+    if not missing_keys.empty:
+        raise ValueError("Review rows require event_review_id or original_assigned_event_date")
+
+    duplicated_ids = reviews[(reviews["event_review_id"] != "")].duplicated(subset=["event_review_id"], keep=False)
+    if duplicated_ids.any():
+        duplicates = reviews.loc[(reviews["event_review_id"] != "") & duplicated_ids, ["event_review_id"]].drop_duplicates().to_dict("records")
+        raise ValueError(f"Duplicate review rows found for event_review_id keys: {duplicates}")
+
+    fallback_rows = reviews["event_review_id"] == ""
+    duplicated_fallback = reviews.loc[fallback_rows].duplicated(subset=["ticker", "original_assigned_event_date"], keep=False)
+    if duplicated_fallback.any():
+        duplicates = reviews.loc[fallback_rows & duplicated_fallback, ["ticker", "original_assigned_event_date"]].drop_duplicates().to_dict("records")
+        raise ValueError(f"Duplicate review rows found for fallback event keys: {duplicates}")
+
+    return reviews.loc[:, ["ticker", "event_review_id", "original_assigned_event_date", "reviewed_event_date", "review_status", "review_note"]].copy()
+
+
+def _apply_event_date_reviews(
+    events: list[ESPPEvent],
+    audit_frame: pd.DataFrame,
+    reviews: pd.DataFrame,
+) -> tuple[list[ESPPEvent], pd.DataFrame]:
+    audited = audit_frame.copy()
+    if audited.empty:
+        audited = pd.DataFrame(
+            columns=[
+                "ticker",
+                "filing_type",
+                "filing_date",
+                "source_fixture_path",
+                "source_id",
+                "source_snippet",
+                "candidate_month_day",
+                "assigned_event_date",
+                "derivation_rule",
+                "confidence",
+                "fallback_anchor_used",
+                "event_review_id",
+            ]
+        )
+
+    audited["review_status"] = "unreviewed"
+    audited["reviewed_event_date"] = None
+    audited["review_note"] = None
+    audited["effective_event_date"] = audited.get("assigned_event_date")
+    audited["included_in_event_study"] = True
+
+    if not reviews.empty and not audited.empty:
+        reviewed = audited.copy()
+        id_reviews = reviews[reviews["event_review_id"] != ""].copy()
+        if not id_reviews.empty:
+            reviewed = reviewed.merge(
+                id_reviews,
+                how="left",
+                on="event_review_id",
+                suffixes=("", "_review"),
+            )
+        else:
+            reviewed["original_assigned_event_date"] = None
+            reviewed["reviewed_event_date_review"] = None
+            reviewed["review_status_review"] = None
+            reviewed["review_note_review"] = None
+
+        unmatched = reviewed["review_status_review"].isna()
+        fallback_reviews = reviews[reviews["event_review_id"] == ""].copy()
+        if unmatched.any() and not fallback_reviews.empty:
+            fallback_matched = reviewed.loc[unmatched].merge(
+                fallback_reviews,
+                how="left",
+                left_on=["ticker", "assigned_event_date"],
+                right_on=["ticker", "original_assigned_event_date"],
+                suffixes=("", "_fallback"),
+            )
+            for column in ("original_assigned_event_date", "reviewed_event_date_review", "review_status_review", "review_note_review"):
+                if column in fallback_matched.columns:
+                    reviewed.loc[unmatched, column] = fallback_matched[column].values
+
+        matched = reviewed["review_status_review"].notna()
+        reviewed.loc[matched, "review_status"] = reviewed.loc[matched, "review_status_review"]
+        reviewed.loc[matched, "reviewed_event_date"] = reviewed.loc[matched, "reviewed_event_date_review"].replace("", None)
+        reviewed.loc[matched, "review_note"] = reviewed.loc[matched, "review_note_review"].replace("", None)
+        corrected = reviewed["review_status"] == "corrected"
+        rejected = reviewed["review_status"] == "rejected"
+        reviewed.loc[corrected, "effective_event_date"] = reviewed.loc[corrected, "reviewed_event_date"]
+        reviewed.loc[rejected, "effective_event_date"] = None
+        reviewed.loc[rejected, "included_in_event_study"] = False
+        audited = reviewed.drop(columns=["original_assigned_event_date", "reviewed_event_date_review", "review_status_review", "review_note_review"])
+
+    event_lookup: dict[tuple[str, str], ESPPEvent] = {}
+    for event in events:
+        event_date_key = event.event_date.isoformat()
+        fallback_key = f"{event.ticker}|{event_date_key}"
+        event_lookup[(fallback_key, event_date_key)] = event
+        if event.event_review_id:
+            event_lookup[(event.event_review_id, event_date_key)] = event
+    reviewed_events: list[ESPPEvent] = []
+    for row in audited.itertuples(index=False):
+        if not bool(row.included_in_event_study):
+            continue
+        event_date_key = row.assigned_event_date
+        lookup_candidates = [
+            (f"{row.ticker}|{event_date_key}", event_date_key),
+        ]
+        if getattr(row, "event_review_id", None):
+            lookup_candidates.insert(0, (row.event_review_id, event_date_key))
+
+        original_event = None
+        for original_key in lookup_candidates:
+            original_event = event_lookup.get(original_key)
+            if original_event is not None:
+                break
+        if original_event is None:
+            continue
+        effective_event_date = row.effective_event_date or row.assigned_event_date
+        reviewed_events.append(replace(original_event, event_date=_parse_date(effective_event_date, "effective_event_date")))
+
+    audited["reviewed_event_date"] = audited["reviewed_event_date"].where(pd.notna(audited["reviewed_event_date"]), None)
+    audited["review_note"] = audited["review_note"].where(pd.notna(audited["review_note"]), None)
+    audited["effective_event_date"] = audited["effective_event_date"].where(pd.notna(audited["effective_event_date"]), None)
+    audited = audited.sort_values(["ticker", "assigned_event_date", "candidate_month_day", "source_id"], ignore_index=True)
+    return reviewed_events, audited
 
 
 def _ticker_meta_frame(config: ExperimentConfig, panel: pd.DataFrame) -> pd.DataFrame:
@@ -287,6 +513,7 @@ def _run_diagnostic_report(panel: pd.DataFrame, output_dir: Path) -> None:
 def run_first_pass_event_study(config_path: Path) -> None:
     _configure_logging()
     config = _load_config(config_path)
+    reviews = _load_event_date_reviews(config.review_file)
     LOGGER.info(
         "Running ESPP strategy experiment for %s from %s to %s",
         ", ".join(t.ticker for t in config.tickers),
@@ -294,13 +521,14 @@ def run_first_pass_event_study(config_path: Path) -> None:
         config.end_date.isoformat(),
     )
 
-    loader = YFinancePriceLoader()
+    loader = _build_price_data_provider(config)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     benchmark_prices = loader.load_daily_ohlcv(config.benchmark, config.start_date, config.end_date)
     persist_prices(benchmark_prices, config.output_dir / "benchmark_prices.csv")
 
     all_event_rows: list[pd.DataFrame] = []
+    audit_frames: list[pd.DataFrame] = []
     for ticker_cfg in config.tickers:
         ticker = ticker_cfg.ticker
         LOGGER.info("[%s] loading prices", ticker)
@@ -311,9 +539,11 @@ def run_first_pass_event_study(config_path: Path) -> None:
             continue
         persist_prices(prices, config.output_dir / f"{ticker}_prices.csv")
 
-        docs = _mock_filings(ticker, config.start_date.year, config.end_date.year)
+        docs = _load_filings_for_ticker(config, ticker)
         hints = parse_many_espp_hints(docs)
-        events = estimate_event_dates(ticker, hints, config.start_date.year, config.end_date.year)
+        events, audit_frame = estimate_event_dates_with_audit(ticker, hints, config.start_date.year, config.end_date.year)
+        events, audit_frame = _apply_event_date_reviews(events, audit_frame, reviews[reviews["ticker"] == ticker].copy())
+        audit_frames.append(audit_frame)
 
         result = run_event_study(
             price_frame=prices,
@@ -331,6 +561,8 @@ def run_first_pass_event_study(config_path: Path) -> None:
         ticker_panel = result.panel.copy()
         ticker_panel["ticker"] = ticker
         all_event_rows.append(ticker_panel)
+
+    _persist_date_audit(config.output_dir, audit_frames)
 
     if not all_event_rows:
         LOGGER.warning("No event windows generated across universe.")

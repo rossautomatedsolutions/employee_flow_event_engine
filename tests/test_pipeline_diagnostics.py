@@ -1,6 +1,69 @@
-import pandas as pd
+import builtins
+import sys
+import types
+from datetime import date
+from pathlib import Path
 
-from src.pipeline.run_event_study import _diagnostic_conclusion, _distribution_summary, _horizon_returns
+import pandas as pd
+import pytest
+
+matplotlib = types.ModuleType("matplotlib")
+pyplot = types.ModuleType("pyplot")
+
+
+class _DummyAxes:
+    def plot(self, *args, **kwargs) -> None:
+        return None
+
+    def axhline(self, *args, **kwargs) -> None:
+        return None
+
+    def set_title(self, *args, **kwargs) -> None:
+        return None
+
+    def set_xlabel(self, *args, **kwargs) -> None:
+        return None
+
+    def set_ylabel(self, *args, **kwargs) -> None:
+        return None
+
+    def legend(self, *args, **kwargs) -> None:
+        return None
+
+
+class _DummyFigure:
+    def tight_layout(self) -> None:
+        return None
+
+
+def _dummy_subplots(*args, **kwargs):
+    return _DummyFigure(), _DummyAxes()
+
+
+pyplot.Figure = object
+pyplot.subplots = _dummy_subplots
+matplotlib.pyplot = pyplot
+sys.modules.setdefault("matplotlib", matplotlib)
+sys.modules.setdefault("matplotlib.pyplot", pyplot)
+
+from src.pipeline.run_event_study import (
+    ExperimentConfig,
+    TickerConfig,
+    _apply_event_date_reviews,
+    _build_price_data_provider,
+    _diagnostic_conclusion,
+    _distribution_summary,
+    _horizon_returns,
+    _load_event_date_reviews,
+    _load_filings_for_ticker,
+    _load_config,
+    _persist_date_audit,
+    run_first_pass_event_study,
+)
+from src.analysis.event_study import EventStudyConfig, run_event_study
+from src.analysis.strategy import CrossSectionConfig, StrategyConfig
+from src.data.price_loader import CSVPriceLoader
+from src.events.espp_event_extractor import ESPPEvent
 
 
 def _sample_panel() -> pd.DataFrame:
@@ -41,3 +104,505 @@ def test_diagnostic_conclusion_sell_pressure() -> None:
     summary = _distribution_summary(distribution)
 
     assert _diagnostic_conclusion(summary) == "evidence of sell pressure"
+
+
+def test_persist_date_audit_writes_expected_shape(tmp_path) -> None:
+    audit_frame = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "test_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-02-15|test_fixture|06-30|2024-06-30|filing_text_month_day",
+            }
+        ]
+    )
+
+    _persist_date_audit(tmp_path, [audit_frame])
+
+    written = pd.read_csv(tmp_path / "espp_date_audit.csv")
+    assert written.columns.tolist() == [
+        "ticker",
+        "filing_type",
+        "filing_date",
+        "source_fixture_path",
+        "source_id",
+        "source_snippet",
+        "candidate_month_day",
+        "assigned_event_date",
+        "derivation_rule",
+        "confidence",
+        "fallback_anchor_used",
+        "event_review_id",
+        "review_status",
+        "reviewed_event_date",
+        "review_note",
+        "effective_event_date",
+        "included_in_event_study",
+    ]
+    assert written.loc[0, "ticker"] == "TEST"
+
+
+def _test_config_with_fixture_dir(fixture_dir: Path | None) -> ExperimentConfig:
+    return ExperimentConfig(
+        tickers=[TickerConfig(ticker="TEST", market_cap=1.0, employees=1)],
+        benchmark="SPY",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 12, 31),
+        output_dir=Path("artifacts/test"),
+        price_source="yfinance",
+        price_data_path=None,
+        filing_fixture_dir=fixture_dir,
+        review_file=None,
+        event_study=EventStudyConfig(),
+        strategy=StrategyConfig(),
+        cross_section=CrossSectionConfig(),
+    )
+
+
+def test_load_filings_for_ticker_prefers_fixture_and_falls_back_to_mock(tmp_path: Path) -> None:
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    fixture_path = fixture_dir / "test_fixture.yaml"
+    fixture_path.write_text(
+        "\n".join(
+            [
+                'ticker: "TEST"',
+                'filing_type: "10-K"',
+                'filing_date: "2024-02-15"',
+                'source_id: "test_fixture_2024"',
+                'text: |',
+                '  Employee Stock Purchase Plan purchase date occurs on June 30.',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = _test_config_with_fixture_dir(fixture_dir)
+
+    fixture_docs = _load_filings_for_ticker(config, "TEST")
+    assert len(fixture_docs) == 1
+    assert fixture_docs[0].source_kind == "fixture"
+    assert fixture_docs[0].source_id == "test_fixture_2024"
+    assert fixture_docs[0].source_fixture_path == str(fixture_path)
+
+    mock_docs = _load_filings_for_ticker(config, "MISSING")
+    assert len(mock_docs) == 1
+    assert mock_docs[0].ticker == "MISSING"
+    assert mock_docs[0].source_kind == "mock"
+    assert mock_docs[0].source_id == "mock_missing_2024_10k"
+    assert mock_docs[0].source_fixture_path is None
+
+
+def test_apply_event_date_reviews_leaves_events_unchanged_without_review_file() -> None:
+    events = [
+        ESPPEvent(
+            ticker="TEST",
+            event_date=date(2024, 1, 15),
+            source_filing_date=date(2024, 1, 1),
+            source_filing_type="10-K",
+            confidence=0.8,
+            approximation_method="filing_text_month_day",
+            source="fixture",
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "test_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "01-15",
+                "assigned_event_date": "2024-01-15",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|test_fixture|01-15|2024-01-15|filing_text_month_day",
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, _load_event_date_reviews(None))
+
+    assert [event.event_date for event in reviewed_events] == [date(2024, 1, 15)]
+    assert reviewed_audit.loc[0, "review_status"] == "unreviewed"
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-01-15"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is True
+
+
+def test_apply_event_date_reviews_handles_accepted_corrected_and_rejected_rows(tmp_path: Path) -> None:
+    review_file = tmp_path / "espp_date_reviews.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-01-01|test_fixture|01-15|2024-01-15|filing_text_month_day,TEST,2024-01-15,,accepted,Reviewed and kept as-is",
+                "TEST|10-K|2024-01-01|test_fixture|02-15|2024-02-15|filing_text_month_day,TEST,2024-02-15,2024-02-16,corrected,Shift to reviewed business day",
+                "TEST|10-K|2024-01-01|test_fixture|03-15|2024-03-15|filing_text_month_day,TEST,2024-03-15,,rejected,Not a real ESPP purchase date",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    reviews = _load_event_date_reviews(review_file)
+    events = [
+        ESPPEvent("TEST", date(2024, 1, 15), date(2024, 1, 1), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-01-01|test_fixture|01-15|2024-01-15|filing_text_month_day"),
+        ESPPEvent("TEST", date(2024, 2, 15), date(2024, 1, 1), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-01-01|test_fixture|02-15|2024-02-15|filing_text_month_day"),
+        ESPPEvent("TEST", date(2024, 3, 15), date(2024, 1, 1), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-01-01|test_fixture|03-15|2024-03-15|filing_text_month_day"),
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "test_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "01-15",
+                "assigned_event_date": "2024-01-15",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|test_fixture|01-15|2024-01-15|filing_text_month_day",
+            },
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "test_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "02-15",
+                "assigned_event_date": "2024-02-15",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|test_fixture|02-15|2024-02-15|filing_text_month_day",
+            },
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "test_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "03-15",
+                "assigned_event_date": "2024-03-15",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|test_fixture|03-15|2024-03-15|filing_text_month_day",
+            },
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert [event.event_date for event in reviewed_events] == [date(2024, 1, 15), date(2024, 2, 16)]
+    assert reviewed_audit["review_status"].tolist() == ["accepted", "corrected", "rejected"]
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-01-15"
+    assert reviewed_audit.loc[1, "effective_event_date"] == "2024-02-16"
+    assert pd.isna(reviewed_audit.loc[2, "effective_event_date"])
+    assert reviewed_audit["included_in_event_study"].tolist() == [True, True, False]
+
+    idx = pd.bdate_range("2024-01-01", periods=80)
+    price = pd.DataFrame(
+        {
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": [100 + i * 0.1 for i in range(len(idx))],
+            "volume": [1_000_000 + i * 10 for i in range(len(idx))],
+        },
+        index=idx,
+    )
+    benchmark = price.copy()
+    result = run_event_study(price, benchmark, reviewed_events, EventStudyConfig(window_before=0, window_after=0))
+
+    assert sorted(result.panel["event_date"].astype(str).unique().tolist()) == ["2024-01-15", "2024-02-16"]
+    assert "2024-03-15" not in result.panel["event_date"].astype(str).tolist()
+
+
+def test_apply_event_date_reviews_can_review_duplicate_ticker_date_rows_independently(tmp_path: Path) -> None:
+    review_file = tmp_path / "espp_date_reviews.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-01-01|fixture_a|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,,accepted,Keep first duplicate row",
+                "TEST|10-K|2024-01-01|fixture_b|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,,rejected,Reject second duplicate row",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    reviews = _load_event_date_reviews(review_file)
+    events = [
+        ESPPEvent("TEST", date(2024, 6, 30), date(2024, 1, 1), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-01-01|fixture_a|06-30|2024-06-30|filing_text_month_day"),
+        ESPPEvent("TEST", date(2024, 6, 30), date(2024, 1, 1), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-01-01|fixture_b|06-30|2024-06-30|filing_text_month_day"),
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/a.yaml",
+                "source_id": "fixture_a",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|fixture_a|06-30|2024-06-30|filing_text_month_day",
+            },
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-01-01",
+                "source_fixture_path": "fixtures/sec_filings/b.yaml",
+                "source_id": "fixture_b",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-01-01|fixture_b|06-30|2024-06-30|filing_text_month_day",
+            },
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert len(reviewed_events) == 1
+    assert reviewed_events[0].event_review_id == "TEST|10-K|2024-01-01|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    assert reviewed_audit["review_status"].tolist() == ["accepted", "rejected"]
+
+
+def test_csv_price_loader_reads_local_prices_without_yfinance(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    csv_path = tmp_path / "prices.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "ticker,date,open,high,low,close,volume",
+                "TEST,2024-06-30,100,101,99,100.5,1000000",
+                "TEST,2024-07-01,101,102,100,101.5,1100000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    real_import = builtins.__import__
+
+    def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "yfinance":
+            raise AssertionError("yfinance should not be imported for CSV-backed price loading")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+    loader = CSVPriceLoader(csv_path)
+    frame = loader.load_daily_ohlcv("TEST", date(2024, 6, 30), date(2024, 7, 1))
+
+    assert frame.index.strftime("%Y-%m-%d").tolist() == ["2024-06-30", "2024-07-01"]
+    assert frame["close"].tolist() == [100.5, 101.5]
+
+
+def test_csv_price_loader_errors_are_clear(tmp_path: Path) -> None:
+    missing_columns = tmp_path / "missing_columns.csv"
+    missing_columns.write_text(
+        "\n".join(
+            [
+                "ticker,date,open,high,low,close",
+                "TEST,2024-06-30,100,101,99,100.5",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        CSVPriceLoader(missing_columns).load_daily_ohlcv("TEST", date(2024, 6, 30), date(2024, 6, 30))
+
+    good_csv = tmp_path / "good.csv"
+    good_csv.write_text(
+        "\n".join(
+            [
+                "ticker,date,open,high,low,close,volume",
+                "TEST,2024-06-30,100,101,99,100.5,1000000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing ticker"):
+        CSVPriceLoader(good_csv).load_daily_ohlcv("OTHER", date(2024, 6, 30), date(2024, 6, 30))
+
+    with pytest.raises(ValueError, match="available range is 2024-06-30..2024-06-30"):
+        CSVPriceLoader(good_csv).load_daily_ohlcv("TEST", date(2024, 7, 1), date(2024, 7, 2))
+
+
+def test_load_config_and_offline_pipeline_use_csv_price_provider(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fixture_dir = tmp_path / "filings"
+    fixture_dir.mkdir()
+    (fixture_dir / "aapl.yaml").write_text(
+        "\n".join(
+            [
+                'ticker: "AAPL"',
+                'filing_type: "10-K"',
+                'filing_date: "2024-02-15"',
+                'source_id: "aapl_fixture"',
+                'text: |',
+                '  The employee stock purchase plan (ESPP) has six-month offering periods.',
+                '  The purchase date for each period occurs on June 30 and December 31.',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (fixture_dir / "crm.yaml").write_text(
+        "\n".join(
+            [
+                'ticker: "CRM"',
+                'filing_type: "10-K"',
+                'filing_date: "2024-03-01"',
+                'source_id: "crm_fixture"',
+                'text: |',
+                '  The employee stock purchase plan has recurring purchase dates on January 1 and July 1.',
+                '  Each offering period resets after the scheduled purchase date.',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    review_file = tmp_path / "reviews.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "AAPL|10-K|2024-02-15|aapl_fixture|06-30|2024-06-30|filing_text_month_day,AAPL,2024-06-30,2024-07-01,corrected,Shift to local trading calendar row",
+                "AAPL|10-K|2024-02-15|aapl_fixture|12-31|2024-12-31|filing_text_month_day,AAPL,2024-12-31,,accepted,Keep explicit year-end date",
+                "CRM|10-K|2024-03-01|crm_fixture|01-01|2025-01-01|filing_text_month_day,CRM,2025-01-01,2025-01-02,corrected,Shift to local trading calendar row",
+                "CRM|10-K|2024-03-01|crm_fixture|07-01|2024-07-01|filing_text_month_day,CRM,2024-07-01,,rejected,Reject duplicate summer signal for this smoke replay",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    price_file = tmp_path / "prices.csv"
+    price_file.write_text(
+        "\n".join(
+            [
+                "ticker,date,open,high,low,close,volume",
+                "AAPL,2024-06-28,100,101,99,100,1000000",
+                "AAPL,2024-06-29,101,102,100,101,900000",
+                "AAPL,2024-06-30,102,103,101,102,800000",
+                "AAPL,2024-07-01,103,104,102,103,2500000",
+                "AAPL,2024-07-02,104,105,103,104,1100000",
+                "AAPL,2024-12-30,110,111,109,110,1000000",
+                "AAPL,2024-12-31,111,112,110,111,2300000",
+                "AAPL,2025-01-01,112,113,111,112,900000",
+                "AAPL,2025-01-02,113,114,112,113,1000000",
+                "AAPL,2025-01-03,114,115,113,114,1000000",
+                "CRM,2024-06-28,200,201,199,200,900000",
+                "CRM,2024-06-29,201,202,200,201,850000",
+                "CRM,2024-06-30,202,203,201,202,800000",
+                "CRM,2024-07-01,203,204,202,203,2200000",
+                "CRM,2024-07-02,204,205,203,204,1000000",
+                "CRM,2024-12-30,210,211,209,210,1000000",
+                "CRM,2024-12-31,211,212,210,211,900000",
+                "CRM,2025-01-01,212,213,211,212,850000",
+                "CRM,2025-01-02,213,214,212,213,2400000",
+                "CRM,2025-01-03,214,215,213,214,1100000",
+                "SPY,2024-06-28,300,301,299,300,1500000",
+                "SPY,2024-06-29,301,302,300,301,1500000",
+                "SPY,2024-06-30,302,303,301,302,1500000",
+                "SPY,2024-07-01,303,304,302,303,1500000",
+                "SPY,2024-07-02,304,305,303,304,1500000",
+                "SPY,2024-12-30,310,311,309,310,1500000",
+                "SPY,2024-12-31,311,312,310,311,1500000",
+                "SPY,2025-01-01,312,313,311,312,1500000",
+                "SPY,2025-01-02,313,314,312,313,1500000",
+                "SPY,2025-01-03,314,315,313,314,1500000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "artifacts"
+    config_path = tmp_path / "offline.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'benchmark: "SPY"',
+                'price_source: "csv"',
+                f'price_data_path: "{price_file.as_posix()}"',
+                'start_date: "2024-06-28"',
+                'end_date: "2025-01-03"',
+                f'output_dir: "{output_dir.as_posix()}"',
+                "filings:",
+                f'  fixture_dir: "{fixture_dir.as_posix()}"',
+                "reviews:",
+                f'  review_file: "{review_file.as_posix()}"',
+                "tickers:",
+                '  - ticker: "AAPL"',
+                "    market_cap: 3000000000000",
+                "    employees: 161000",
+                '  - ticker: "CRM"',
+                "    market_cap: 280000000000",
+                "    employees: 73600",
+                "event_study:",
+                "  window_before: 1",
+                "  window_after: 1",
+                "  volume_lookback: 5",
+                "strategy:",
+                "  entry_tau: 1",
+                "  exit_tau: 1",
+                "  volume_spike_threshold: 1.0",
+                "  min_confidence: 0.4",
+                "cross_section:",
+                "  market_cap_bins: [500000000000, 2000000000000]",
+                "  volatility_bins: [0.018, 0.032]",
+                "  employee_heavy_threshold: 100000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = _load_config(config_path)
+    loader = _build_price_data_provider(config)
+    assert isinstance(loader, CSVPriceLoader)
+
+    real_import = builtins.__import__
+
+    def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "yfinance":
+            raise AssertionError("yfinance should not be imported for offline CSV pipeline runs")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+    run_first_pass_event_study(config_path)
+
+    audit = pd.read_csv(output_dir / "espp_date_audit.csv")
+    status_counts = audit["review_status"].value_counts().to_dict()
+    assert status_counts["accepted"] == 1
+    assert status_counts["corrected"] == 2
+    assert status_counts["rejected"] == 1
+    assert status_counts["unreviewed"] == 2
+
+    all_events = pd.read_csv(output_dir / "all_event_windows.csv")
+    assert sorted(set(all_events["event_date"].astype(str))) == ["2024-07-01", "2024-12-31", "2025-01-02"]
+    assert "2024-07-01" in all_events["event_date"].astype(str).tolist()
+    assert "2025-01-02" in all_events["event_date"].astype(str).tolist()
+    assert "2025-01-01" not in all_events["event_date"].astype(str).tolist()
+    assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()

@@ -1,0 +1,7 @@
+ticker: AMZN
+filing_type: 10-K
+filing_date: "2024-02-02"
+source_id: amzn_2024_10k_fixture
+text: |
+  The employee stock purchase plan uses six-month offering periods.
+  The purchase date is the last day of the period.

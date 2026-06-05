@@ -1,35 +1,36 @@
+# Research v0.1 example configuration.
+# Filing inputs, date reviews, and price data are all local for offline replay.
 benchmark: SPY
-start_date: "2021-01-01"
-end_date: "2026-01-01"
+price_source: csv
+price_data_path: "fixtures/prices/research_sample_prices.csv"
+start_date: "2024-06-28"
+end_date: "2025-01-03"
 output_dir: "artifacts/first_pass"
+
+filings:
+  fixture_dir: "fixtures/sec_filings"
+
+reviews:
+  review_file: "config/espp_date_reviews.csv"
 
 tickers:
   - ticker: AAPL
     market_cap: 3000000000000
     employees: 161000
-  - ticker: MSFT
-    market_cap: 3100000000000
-    employees: 221000
-  - ticker: AMZN
-    market_cap: 1900000000000
-    employees: 1525000
   - ticker: CRM
     market_cap: 280000000000
     employees: 73600
-  - ticker: NVDA
-    market_cap: 2500000000000
-    employees: 29600
 
 event_study:
-  window_before: 10
-  window_after: 10
-  volume_lookback: 20
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5
 
 strategy:
   entry_tau: 1
-  exit_tau: 5
-  volume_spike_threshold: 1.25
-  min_confidence: 0.7
+  exit_tau: 1
+  volume_spike_threshold: 1.0
+  min_confidence: 0.4
 
 cross_section:
   market_cap_bins: [500000000000, 2000000000000]

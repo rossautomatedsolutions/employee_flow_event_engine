@@ -1,0 +1,7 @@
+ticker: MSFT
+filing_type: 10-K
+filing_date: "2024-02-01"
+source_id: msft_2024_10k_fixture
+text: |
+  Our employee stock purchase plan provides purchase periods that end on June 30 and December 31.
+  The ESPP purchase date is the last business day of each stated period.

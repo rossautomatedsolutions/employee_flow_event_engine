@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from src.analysis.metrics import abnormal_returns, daily_returns, mean_and_tstat, volume_spike_ratio
+
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:  # pragma: no cover - exercised in non-test offline runs
+    plt = None
 
 
 @dataclass(slots=True)
@@ -24,7 +28,7 @@ class EventStudyResult:
     event_study_table: pd.DataFrame
     summary_stats: pd.DataFrame
     metrics: pd.DataFrame
-    plots: dict[str, plt.Figure]
+    plots: dict[str, Any]
 
     @property
     def aar_summary(self) -> pd.DataFrame:
@@ -65,8 +69,8 @@ def _event_window_index(anchor: int, before: int, after: int, limit: int) -> np.
     return np.arange(start, stop)
 
 
-def _build_plots(table: pd.DataFrame, label: str) -> dict[str, plt.Figure]:
-    if table.empty:
+def _build_plots(table: pd.DataFrame, label: str) -> dict[str, Any]:
+    if table.empty or plt is None:
         return {}
 
     figs: dict[str, plt.Figure] = {}

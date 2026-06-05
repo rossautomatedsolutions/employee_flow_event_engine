@@ -1,0 +1,7 @@
+ticker: AAPL
+filing_type: 10-K
+filing_date: "2024-02-15"
+source_id: aapl_2024_10k_fixture
+text: |
+  The employee stock purchase plan (ESPP) has six-month offering periods.
+  The purchase date for each period occurs on June 30 and December 31.
