@@ -336,6 +336,23 @@ def test_apply_event_date_reviews_handles_accepted_corrected_and_rejected_rows(t
     assert "2024-03-15" not in result.panel["event_date"].astype(str).tolist()
 
 
+def test_load_event_date_reviews_rejects_duplicate_legacy_fallback_keys(tmp_path: Path) -> None:
+    review_file = tmp_path / "duplicate_fallback_reviews.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ",TEST,2024-06-30,2024-07-01,corrected,First ambiguous fallback row",
+                ",TEST,2024-06-30,,rejected,Second ambiguous fallback row",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate review rows found for fallback event keys"):
+        _load_event_date_reviews(review_file)
+
+
 def test_apply_event_date_reviews_can_review_duplicate_ticker_date_rows_independently(tmp_path: Path) -> None:
     review_file = tmp_path / "espp_date_reviews.csv"
     review_file.write_text(
