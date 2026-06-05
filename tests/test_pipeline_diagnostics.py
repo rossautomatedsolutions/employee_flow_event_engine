@@ -353,6 +353,26 @@ def test_load_event_date_reviews_rejects_duplicate_legacy_fallback_keys(tmp_path
         _load_event_date_reviews(review_file)
 
 
+def test_load_event_date_reviews_rejects_duplicate_event_review_ids_with_conflicting_key_in_message(tmp_path: Path) -> None:
+    duplicate_key = "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    review_file = tmp_path / "duplicate_event_review_ids.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                f"{duplicate_key},TEST,2024-06-30,2024-07-01,corrected,First duplicate preferred-key row",
+                f"{duplicate_key},TEST,2024-06-30,,rejected,Second duplicate preferred-key row",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate review rows found for event_review_id keys") as exc_info:
+        _load_event_date_reviews(review_file)
+
+    assert duplicate_key in str(exc_info.value)
+
+
 def test_apply_event_date_reviews_can_review_duplicate_ticker_date_rows_independently(tmp_path: Path) -> None:
     review_file = tmp_path / "espp_date_reviews.csv"
     review_file.write_text(
