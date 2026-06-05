@@ -63,7 +63,9 @@ from src.pipeline.run_event_study import (
 from src.analysis.event_study import EventStudyConfig, run_event_study
 from src.analysis.strategy import CrossSectionConfig, StrategyConfig
 from src.data.price_loader import CSVPriceLoader
+from src.data.sec_parser import parse_many_espp_hints
 from src.events.espp_event_extractor import ESPPEvent
+from src.events.espp_event_extractor import estimate_event_dates_with_audit
 
 
 def _sample_panel() -> pd.DataFrame:
@@ -833,3 +835,34 @@ def test_business_day_corrected_review_ids_still_match_and_flow_downstream() -> 
     assert sorted(result.panel["event_date"].astype(str).unique().tolist()) == ["2024-07-01", "2025-01-02"]
     assert "2024-06-30" not in result.panel["event_date"].astype(str).tolist()
     assert "2025-01-01" not in result.panel["event_date"].astype(str).tolist()
+
+
+def test_business_day_review_csv_fully_covers_generated_reviewed_ids() -> None:
+    config = _load_config(Path("config/offline_business_day_example.yaml"))
+    reviews = _load_event_date_reviews(Path("config/espp_business_day_reviews.csv"))
+
+    audit_frames: list[pd.DataFrame] = []
+    reviewed_statuses: dict[str, str] = {}
+    for ticker_cfg in config.tickers:
+        docs = _load_filings_for_ticker(config, ticker_cfg.ticker)
+        hints = parse_many_espp_hints(docs)
+        events, audit = estimate_event_dates_with_audit(
+            ticker_cfg.ticker,
+            hints,
+            config.start_date.year,
+            config.end_date.year,
+        )
+        _, reviewed_audit = _apply_event_date_reviews(events, audit, reviews[reviews["ticker"] == ticker_cfg.ticker].copy())
+        audit_frames.append(reviewed_audit)
+        ticker_reviewed = reviewed_audit[reviewed_audit["review_status"] != "unreviewed"]
+        reviewed_statuses.update(dict(zip(ticker_reviewed["event_review_id"], ticker_reviewed["review_status"])))
+
+    full_audit = pd.concat(audit_frames, ignore_index=True)
+    expected_reviews = reviews[reviews["event_review_id"] != ""].copy()
+
+    generated_ids = set(full_audit["event_review_id"].tolist())
+    expected_ids = set(expected_reviews["event_review_id"].tolist())
+    assert expected_ids.issubset(generated_ids)
+
+    expected_statuses = dict(zip(expected_reviews["event_review_id"], expected_reviews["review_status"]))
+    assert reviewed_statuses == expected_statuses
