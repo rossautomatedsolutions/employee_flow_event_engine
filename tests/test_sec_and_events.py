@@ -141,6 +141,29 @@ def test_estimate_event_dates_with_audit_fallback_event_review_ids_match_busines
     ]
 
 
+def test_estimate_event_dates_with_audit_filing_review_ids_match_business_day_corrected_rows() -> None:
+    aapl_doc = FilingDocument(
+        ticker="AAPL",
+        filing_type="10-K",
+        filing_date=date(2024, 2, 15),
+        text="Employee Stock Purchase Plan purchase date occurs on June 30 and December 31.",
+        source_id="aapl_2024_10k_fixture",
+    )
+    crm_doc = FilingDocument(
+        ticker="CRM",
+        filing_type="10-K",
+        filing_date=date(2024, 3, 1),
+        text="Employee Stock Purchase Plan purchase dates occur on January 1 and July 1.",
+        source_id="crm_2024_10k_fixture",
+    )
+
+    _, aapl_audit = estimate_event_dates_with_audit("AAPL", [extract_espp_hints(aapl_doc)], 2024, 2024)
+    _, crm_audit = estimate_event_dates_with_audit("CRM", [extract_espp_hints(crm_doc)], 2024, 2025)
+
+    assert "AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day" in aapl_audit["event_review_id"].tolist()
+    assert "CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day" in crm_audit["event_review_id"].tolist()
+
+
 def test_estimate_event_dates_with_audit_rolls_forward_past_filing_date() -> None:
     doc = FilingDocument(
         ticker="TEST",

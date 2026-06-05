@@ -743,3 +743,93 @@ def test_business_day_fallback_review_ids_still_match_manual_rejections() -> Non
     assert reviewed_events == []
     assert reviewed_audit["review_status"].tolist() == ["rejected", "rejected"]
     assert reviewed_audit["included_in_event_study"].tolist() == [False, False]
+
+
+def test_business_day_corrected_review_ids_still_match_and_flow_downstream() -> None:
+    reviews = _load_event_date_reviews(Path("config/espp_business_day_reviews.csv"))
+    corrected_reviews = reviews[
+        reviews["event_review_id"].isin(
+            [
+                "AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day",
+                "CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day",
+            ]
+        )
+    ].sort_values("ticker", ignore_index=True)
+
+    assert corrected_reviews["event_review_id"].tolist() == [
+        "AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day",
+        "CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day",
+    ]
+    assert corrected_reviews["review_status"].tolist() == ["corrected", "corrected"]
+    assert corrected_reviews["reviewed_event_date"].tolist() == ["2024-07-01", "2025-01-02"]
+
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/aapl_2024_10k.yaml",
+                "source_id": "aapl_2024_10k_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 1.0,
+                "fallback_anchor_used": False,
+                "event_review_id": "AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day",
+            },
+            {
+                "ticker": "CRM",
+                "filing_type": "10-K",
+                "filing_date": "2024-03-01",
+                "source_fixture_path": "fixtures/sec_filings/crm_2024_10k.yaml",
+                "source_id": "crm_2024_10k_fixture",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "01-01",
+                "assigned_event_date": "2025-01-01",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 1.0,
+                "fallback_anchor_used": False,
+                "event_review_id": "CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day",
+            },
+        ]
+    )
+    events = [
+        ESPPEvent("AAPL", date(2024, 6, 30), date(2024, 2, 15), "10-K", 1.0, "filing_text_month_day", "fixture", "AAPL|10-K|2024-02-15|aapl_2024_10k_fixture|06-30|2024-06-30|filing_text_month_day"),
+        ESPPEvent("CRM", date(2025, 1, 1), date(2024, 3, 1), "10-K", 1.0, "filing_text_month_day", "fixture", "CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day"),
+    ]
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, corrected_reviews)
+
+    assert [event.event_date for event in reviewed_events] == [date(2024, 7, 1), date(2025, 1, 2)]
+    assert reviewed_audit["review_status"].tolist() == ["corrected", "corrected"]
+    assert reviewed_audit["effective_event_date"].tolist() == ["2024-07-01", "2025-01-02"]
+    assert reviewed_audit["included_in_event_study"].tolist() == [True, True]
+
+    idx = pd.to_datetime(["2024-06-28", "2024-07-01", "2024-07-02", "2024-12-31", "2025-01-02", "2025-01-03"])
+    price = pd.DataFrame(
+        {
+            "open": [100, 103, 104, 210, 213, 214],
+            "high": [101, 104, 105, 211, 214, 215],
+            "low": [99, 102, 103, 209, 212, 213],
+            "close": [100, 103, 104, 211, 213, 214],
+            "volume": [1_000_000, 2_500_000, 1_100_000, 900_000, 2_400_000, 1_100_000],
+        },
+        index=idx,
+    )
+    benchmark = pd.DataFrame(
+        {
+            "open": [300, 303, 304, 311, 313, 314],
+            "high": [301, 304, 305, 312, 314, 315],
+            "low": [299, 302, 303, 310, 312, 313],
+            "close": [300, 303, 304, 311, 313, 314],
+            "volume": [1_500_000] * 6,
+        },
+        index=idx,
+    )
+    result = run_event_study(price, benchmark, reviewed_events, EventStudyConfig(window_before=0, window_after=0))
+
+    assert sorted(result.panel["event_date"].astype(str).unique().tolist()) == ["2024-07-01", "2025-01-02"]
+    assert "2024-06-30" not in result.panel["event_date"].astype(str).tolist()
+    assert "2025-01-01" not in result.panel["event_date"].astype(str).tolist()
