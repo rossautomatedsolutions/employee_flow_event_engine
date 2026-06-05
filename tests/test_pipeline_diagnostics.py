@@ -393,6 +393,125 @@ def test_apply_event_date_reviews_can_review_duplicate_ticker_date_rows_independ
     assert reviewed_audit["review_status"].tolist() == ["accepted", "rejected"]
 
 
+def test_apply_event_date_reviews_supports_legacy_ticker_date_fallback_matching() -> None:
+    reviews = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "event_review_id": "",
+                "original_assigned_event_date": "2024-06-30",
+                "reviewed_event_date": "2024-07-01",
+                "review_status": "corrected",
+                "review_note": "Legacy fallback review without deterministic id",
+            }
+        ]
+    )
+    events = [
+        ESPPEvent(
+            "TEST",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day",
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "fixture_a",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day",
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert [event.event_date for event in reviewed_events] == [date(2024, 7, 1)]
+    assert reviewed_audit.loc[0, "review_status"] == "corrected"
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-07-01"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is True
+
+
+def test_apply_event_date_reviews_prefers_event_review_id_over_legacy_ticker_date_key() -> None:
+    reviews = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "event_review_id": "TEST|10-K|2024-02-15|fixture_b|06-30|2024-06-30|filing_text_month_day",
+                "original_assigned_event_date": "2024-06-30",
+                "reviewed_event_date": "",
+                "review_status": "rejected",
+                "review_note": "Specific duplicate row should be rejected by id",
+            },
+            {
+                "ticker": "TEST",
+                "event_review_id": "",
+                "original_assigned_event_date": "2024-06-30",
+                "reviewed_event_date": "2024-07-01",
+                "review_status": "corrected",
+                "review_note": "Legacy fallback applies only to unmatched rows",
+            },
+        ]
+    )
+    events = [
+        ESPPEvent("TEST", date(2024, 6, 30), date(2024, 2, 15), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"),
+        ESPPEvent("TEST", date(2024, 6, 30), date(2024, 2, 15), "10-K", 0.8, "filing_text_month_day", "fixture", "TEST|10-K|2024-02-15|fixture_b|06-30|2024-06-30|filing_text_month_day"),
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/a.yaml",
+                "source_id": "fixture_a",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day",
+            },
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/b.yaml",
+                "source_id": "fixture_b",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "TEST|10-K|2024-02-15|fixture_b|06-30|2024-06-30|filing_text_month_day",
+            },
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert [event.event_review_id for event in reviewed_events] == ["TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"]
+    assert [event.event_date for event in reviewed_events] == [date(2024, 7, 1)]
+    assert reviewed_audit["review_status"].tolist() == ["corrected", "rejected"]
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-07-01"
+    assert pd.isna(reviewed_audit.loc[1, "effective_event_date"])
+
+
 def test_csv_price_loader_reads_local_prices_without_yfinance(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     csv_path = tmp_path / "prices.csv"
     csv_path.write_text(

@@ -292,9 +292,15 @@ def _apply_event_date_reviews(
                 right_on=["ticker", "original_assigned_event_date"],
                 suffixes=("", "_fallback"),
             )
-            for column in ("original_assigned_event_date", "reviewed_event_date_review", "review_status_review", "review_note_review"):
-                if column in fallback_matched.columns:
-                    reviewed.loc[unmatched, column] = fallback_matched[column].values
+            fallback_column_map = {
+                "original_assigned_event_date": "original_assigned_event_date",
+                "reviewed_event_date_review": "reviewed_event_date_fallback",
+                "review_status_review": "review_status_fallback",
+                "review_note_review": "review_note_fallback",
+            }
+            for target_column, source_column in fallback_column_map.items():
+                if source_column in fallback_matched.columns:
+                    reviewed.loc[unmatched, target_column] = fallback_matched[source_column].values
 
         matched = reviewed["review_status_review"].notna()
         reviewed.loc[matched, "review_status"] = reviewed.loc[matched, "review_status_review"]
