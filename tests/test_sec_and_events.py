@@ -123,6 +123,24 @@ def test_estimate_event_dates_with_audit_uses_fallback_anchors() -> None:
     assert set(audit["derivation_rule"].tolist()) == {"fallback_default_anchors"}
 
 
+def test_estimate_event_dates_with_audit_fallback_event_review_ids_match_business_day_review_csv() -> None:
+    doc = FilingDocument(
+        ticker="AAPL",
+        filing_type="10-K",
+        filing_date=date(2024, 2, 15),
+        text="Employee Stock Purchase Plan purchase date occurs on June 30 and December 31.",
+        source_id="aapl_2024_10k_fixture",
+    )
+
+    _, audit = estimate_event_dates_with_audit("AAPL", [extract_espp_hints(doc)], 2024, 2025)
+    fallback_ids = audit.loc[audit["fallback_anchor_used"], "event_review_id"].tolist()
+
+    assert fallback_ids == [
+        "AAPL|na|na|default_anchor_aapl_2025_0630|06-30|2025-06-30|fallback_default_anchors",
+        "AAPL|na|na|default_anchor_aapl_2025_1231|12-31|2025-12-31|fallback_default_anchors",
+    ]
+
+
 def test_estimate_event_dates_with_audit_rolls_forward_past_filing_date() -> None:
     doc = FilingDocument(
         ticker="TEST",

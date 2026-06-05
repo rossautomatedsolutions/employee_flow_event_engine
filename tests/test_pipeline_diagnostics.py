@@ -686,3 +686,60 @@ def test_offline_business_day_config_runs_without_live_market_data(monkeypatch: 
     assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()
     assert "2025-06-30" not in all_events["event_date"].astype(str).tolist()
     assert "2025-12-31" not in all_events["event_date"].astype(str).tolist()
+
+
+def test_business_day_fallback_review_ids_still_match_manual_rejections() -> None:
+    review_ids = _load_event_date_reviews(Path("config/espp_business_day_reviews.csv"))
+    rejected_fallback_reviews = review_ids[
+        (review_ids["ticker"] == "AAPL")
+        & (review_ids["review_status"] == "rejected")
+        & (review_ids["original_assigned_event_date"].isin(["2025-06-30", "2025-12-31"]))
+    ].sort_values("original_assigned_event_date", ignore_index=True)
+
+    assert rejected_fallback_reviews["event_review_id"].tolist() == [
+        "AAPL|na|na|default_anchor_aapl_2025_0630|06-30|2025-06-30|fallback_default_anchors",
+        "AAPL|na|na|default_anchor_aapl_2025_1231|12-31|2025-12-31|fallback_default_anchors",
+    ]
+
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "filing_type": None,
+                "filing_date": None,
+                "source_fixture_path": None,
+                "source_id": "default_anchor_aapl_2025_0630",
+                "source_snippet": None,
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2025-06-30",
+                "derivation_rule": "fallback_default_anchors",
+                "confidence": 0.2,
+                "fallback_anchor_used": True,
+                "event_review_id": "AAPL|na|na|default_anchor_aapl_2025_0630|06-30|2025-06-30|fallback_default_anchors",
+            },
+            {
+                "ticker": "AAPL",
+                "filing_type": None,
+                "filing_date": None,
+                "source_fixture_path": None,
+                "source_id": "default_anchor_aapl_2025_1231",
+                "source_snippet": None,
+                "candidate_month_day": "12-31",
+                "assigned_event_date": "2025-12-31",
+                "derivation_rule": "fallback_default_anchors",
+                "confidence": 0.2,
+                "fallback_anchor_used": True,
+                "event_review_id": "AAPL|na|na|default_anchor_aapl_2025_1231|12-31|2025-12-31|fallback_default_anchors",
+            },
+        ]
+    )
+    events = [
+        ESPPEvent("AAPL", date(2025, 6, 30), date(2025, 1, 1), "N/A", 0.2, "fallback_default_anchors", "heuristic", "AAPL|na|na|default_anchor_aapl_2025_0630|06-30|2025-06-30|fallback_default_anchors"),
+        ESPPEvent("AAPL", date(2025, 12, 31), date(2025, 1, 1), "N/A", 0.2, "fallback_default_anchors", "heuristic", "AAPL|na|na|default_anchor_aapl_2025_1231|12-31|2025-12-31|fallback_default_anchors"),
+    ]
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, rejected_fallback_reviews)
+
+    assert reviewed_events == []
+    assert reviewed_audit["review_status"].tolist() == ["rejected", "rejected"]
+    assert reviewed_audit["included_in_event_study"].tolist() == [False, False]
