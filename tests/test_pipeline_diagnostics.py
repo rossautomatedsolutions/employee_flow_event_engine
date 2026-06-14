@@ -1189,6 +1189,114 @@ def test_load_config_and_offline_pipeline_use_csv_price_provider(monkeypatch: py
     assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()
 
 
+def test_rejected_review_stays_excluded_across_run_first_pass_boundary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fixture_dir = tmp_path / "filings"
+    fixture_dir.mkdir()
+    (fixture_dir / "test.yaml").write_text(
+        "\n".join(
+            [
+                'ticker: "TEST"',
+                'filing_type: "10-K"',
+                'filing_date: "2024-02-15"',
+                'source_id: "test_fixture"',
+                'text: |',
+                '  The employee stock purchase plan (ESPP) has six-month offering periods.',
+                '  The purchase date for each period occurs on June 30 and December 31.',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    review_file = tmp_path / "reviews.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-02-15|test_fixture|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,,accepted,Keep the summer event in the study",
+                "TEST|10-K|2024-02-15|test_fixture|12-31|2024-12-31|filing_text_month_day,TEST,2024-12-31,,rejected,Reject the year-end event from the study",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    price_file = tmp_path / "prices.csv"
+    price_file.write_text(
+        "\n".join(
+            [
+                "ticker,date,open,high,low,close,volume",
+                "TEST,2024-06-28,100,101,99,100,1000000",
+                "TEST,2024-06-29,101,102,100,101,900000",
+                "TEST,2024-06-30,102,103,101,102,800000",
+                "TEST,2024-07-01,103,104,102,103,1100000",
+                "TEST,2024-12-30,110,111,109,110,1000000",
+                "TEST,2024-12-31,111,112,110,111,1200000",
+                "TEST,2025-01-01,112,113,111,112,1000000",
+                "SPY,2024-06-28,300,301,299,300,1500000",
+                "SPY,2024-06-29,301,302,300,301,1500000",
+                "SPY,2024-06-30,302,303,301,302,1500000",
+                "SPY,2024-07-01,303,304,302,303,1500000",
+                "SPY,2024-12-30,310,311,309,310,1500000",
+                "SPY,2024-12-31,311,312,310,311,1500000",
+                "SPY,2025-01-01,312,313,311,312,1500000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "artifacts"
+    config_path = tmp_path / "offline_rejected_boundary.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'benchmark: "SPY"',
+                'price_source: "csv"',
+                f'price_data_path: "{price_file.as_posix()}"',
+                'start_date: "2024-06-28"',
+                'end_date: "2025-01-01"',
+                f'output_dir: "{output_dir.as_posix()}"',
+                "filings:",
+                f'  fixture_dir: "{fixture_dir.as_posix()}"',
+                "reviews:",
+                f'  review_file: "{review_file.as_posix()}"',
+                "tickers:",
+                '  - ticker: "TEST"',
+                "    market_cap: 1000000000",
+                "    employees: 1000",
+                "event_study:",
+                "  window_before: 0",
+                "  window_after: 1",
+                "  volume_lookback: 5",
+                "strategy:",
+                "  entry_tau: 1",
+                "  exit_tau: 1",
+                "  volume_spike_threshold: 1.0",
+                "  min_confidence: 0.0",
+                "cross_section:",
+                "  market_cap_bins: [500000000, 2000000000]",
+                "  volatility_bins: [0.01, 0.02]",
+                "  employee_heavy_threshold: 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    _guard_yfinance_import(monkeypatch)
+    run_first_pass_event_study(config_path)
+
+    audit = pd.read_csv(output_dir / "espp_date_audit.csv")
+    rejected_row = audit[audit["event_review_id"] == "TEST|10-K|2024-02-15|test_fixture|12-31|2024-12-31|filing_text_month_day"]
+    included_row = audit[audit["event_review_id"] == "TEST|10-K|2024-02-15|test_fixture|06-30|2024-06-30|filing_text_month_day"]
+    all_events = pd.read_csv(output_dir / "all_event_windows.csv")
+
+    assert rejected_row["review_status"].tolist() == ["rejected"]
+    assert rejected_row["included_in_event_study"].tolist() == [False]
+    assert included_row["review_status"].tolist() == ["accepted"]
+    assert included_row["included_in_event_study"].tolist() == [True]
+    assert sorted(set(all_events["event_date"].astype(str))) == ["2024-06-30"]
+    assert "2024-12-31" not in all_events["event_date"].astype(str).tolist()
+    assert sorted(set(all_events["ticker"])) == ["TEST"]
+
+
 def _guard_yfinance_import(monkeypatch: pytest.MonkeyPatch) -> None:
     real_import = builtins.__import__
 
