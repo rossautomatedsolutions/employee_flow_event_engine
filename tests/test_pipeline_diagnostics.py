@@ -153,6 +153,135 @@ def test_persist_date_audit_writes_expected_shape(tmp_path) -> None:
     assert written.loc[0, "ticker"] == "TEST"
 
 
+def test_persist_date_audit_records_rejected_reviews_for_auditability(tmp_path: Path) -> None:
+    event_review_id = "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    reviews = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "event_review_id": event_review_id,
+                "original_assigned_event_date": "2024-06-30",
+                "reviewed_event_date": "",
+                "review_status": "rejected",
+                "review_note": "Manual review rejected this candidate event",
+            }
+        ]
+    )
+    events = [
+        ESPPEvent(
+            "TEST",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            event_review_id,
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "fixture_a",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": event_review_id,
+            }
+        ]
+    )
+
+    _, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+    _persist_date_audit(tmp_path, [reviewed_audit])
+
+    written = pd.read_csv(tmp_path / "espp_date_audit.csv")
+
+    assert written.loc[0, "event_review_id"] == event_review_id
+    assert written.loc[0, "review_status"] == "rejected"
+    assert bool(written.loc[0, "included_in_event_study"]) is False
+    assert pd.isna(written.loc[0, "effective_event_date"])
+    assert written.loc[0, "review_note"] == "Manual review rejected this candidate event"
+
+
+def test_rejected_review_is_excluded_from_event_study_output_but_preserved_in_audit(tmp_path: Path) -> None:
+    event_review_id = "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    reviews = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "event_review_id": event_review_id,
+                "original_assigned_event_date": "2024-06-30",
+                "reviewed_event_date": "",
+                "review_status": "rejected",
+                "review_note": "Manual review rejected this candidate event",
+            }
+        ]
+    )
+    events = [
+        ESPPEvent(
+            "TEST",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            event_review_id,
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/test.yaml",
+                "source_id": "fixture_a",
+                "source_snippet": "employee stock purchase plan",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": event_review_id,
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+    _persist_date_audit(tmp_path, [reviewed_audit])
+
+    price_index = pd.bdate_range("2024-06-28", periods=3)
+    price = pd.DataFrame(
+        {
+            "open": [100.0, 101.0, 102.0],
+            "high": [101.0, 102.0, 103.0],
+            "low": [99.0, 100.0, 101.0],
+            "close": [100.0, 101.0, 102.0],
+            "volume": [1_000_000, 1_100_000, 1_200_000],
+        },
+        index=price_index,
+    )
+    benchmark = price.copy()
+    result = run_event_study(price, benchmark, reviewed_events, EventStudyConfig(window_before=0, window_after=0))
+    written_audit = pd.read_csv(tmp_path / "espp_date_audit.csv")
+
+    assert reviewed_events == []
+    assert reviewed_audit.loc[0, "review_status"] == "rejected"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is False
+    assert result.panel.empty
+    assert written_audit.loc[0, "event_review_id"] == event_review_id
+    assert written_audit.loc[0, "review_status"] == "rejected"
+    assert bool(written_audit.loc[0, "included_in_event_study"]) is False
+
+
 def _test_config_with_fixture_dir(fixture_dir: Path | None) -> ExperimentConfig:
     return ExperimentConfig(
         tickers=[TickerConfig(ticker="TEST", market_cap=1.0, employees=1)],
@@ -353,6 +482,119 @@ def test_load_event_date_reviews_rejects_duplicate_legacy_fallback_keys(tmp_path
         _load_event_date_reviews(review_file)
 
 
+def test_load_event_date_reviews_rejects_duplicate_legacy_fallback_keys_after_whitespace_normalization(tmp_path: Path) -> None:
+    review_file = tmp_path / "duplicate_fallback_reviews_whitespace.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ",TEST,2024-06-30,,accepted,First normalized fallback row",
+                ", TEST , 2024-06-30 ,,rejected,Whitespace-variant fallback row",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate review rows found for fallback event keys"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_legacy_rows_without_any_review_key(tmp_path: Path) -> None:
+    review_file = tmp_path / "missing_legacy_review_key.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ",TEST,,2024-07-01,corrected,Malformed legacy review row without any matching key",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Review rows require event_review_id or original_assigned_event_date"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_blank_ticker_values(tmp_path: Path) -> None:
+    review_file = tmp_path / "blank_ticker_review.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ",,2024-06-30,2024-07-01,corrected,Blank legacy fallback ticker should fail fast",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ticker"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_invalid_review_status_values(tmp_path: Path) -> None:
+    review_file = tmp_path / "invalid_review_status.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,,approve,Unsupported review status should fail fast",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid review_status"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_blank_review_status_values(tmp_path: Path) -> None:
+    review_file = tmp_path / "blank_review_status.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,,,Blank review status should fail fast",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid review_status"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_malformed_reviewed_event_date_values(tmp_path: Path) -> None:
+    review_file = tmp_path / "invalid_reviewed_event_date.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day,TEST,2024-06-30,07/01/2024,corrected,Malformed corrected reviewed date should fail fast",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Invalid reviewed_event_date"):
+        _load_event_date_reviews(review_file)
+
+
+def test_load_event_date_reviews_rejects_malformed_original_assigned_event_date_values(tmp_path: Path) -> None:
+    review_file = tmp_path / "invalid_original_assigned_event_date.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ",TEST,06/30/2024,2024-07-01,corrected,Malformed legacy fallback key date should fail fast",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Invalid original_assigned_event_date"):
+        _load_event_date_reviews(review_file)
+
+
 def test_load_event_date_reviews_rejects_duplicate_event_review_ids_with_conflicting_key_in_message(tmp_path: Path) -> None:
     duplicate_key = "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
     review_file = tmp_path / "duplicate_event_review_ids.csv"
@@ -362,6 +604,26 @@ def test_load_event_date_reviews_rejects_duplicate_event_review_ids_with_conflic
                 "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
                 f"{duplicate_key},TEST,2024-06-30,2024-07-01,corrected,First duplicate preferred-key row",
                 f"{duplicate_key},TEST,2024-06-30,,rejected,Second duplicate preferred-key row",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate review rows found for event_review_id keys") as exc_info:
+        _load_event_date_reviews(review_file)
+
+    assert duplicate_key in str(exc_info.value)
+
+
+def test_load_event_date_reviews_rejects_duplicate_event_review_ids_after_whitespace_normalization(tmp_path: Path) -> None:
+    duplicate_key = "TEST|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    review_file = tmp_path / "duplicate_event_review_ids_whitespace.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                f"{duplicate_key},TEST,2024-06-30,,accepted,First preferred-key row",
+                f" {duplicate_key} ,TEST,2024-06-30,,rejected,Whitespace-variant preferred-key row",
             ]
         ),
         encoding="utf-8",
@@ -480,6 +742,167 @@ def test_apply_event_date_reviews_supports_legacy_ticker_date_fallback_matching(
     assert reviewed_audit.loc[0, "review_status"] == "corrected"
     assert reviewed_audit.loc[0, "effective_event_date"] == "2024-07-01"
     assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is True
+
+
+def test_apply_event_date_reviews_supports_whitespace_normalized_legacy_ticker_date_fallback_matching(tmp_path: Path) -> None:
+    review_file = tmp_path / "whitespace_legacy_fallback_review.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                ", AAPL , 2024-06-30 ,2024-07-01,corrected,Legacy fallback row should still match after normalization",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    reviews = _load_event_date_reviews(review_file)
+
+    events = [
+        ESPPEvent(
+            "AAPL",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            "AAPL|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day",
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/aapl.yaml",
+                "source_id": "fixture_a",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": "AAPL|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day",
+                "included_in_event_study": True,
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert reviews.loc[0, "event_review_id"] == ""
+    assert [event.event_date for event in reviewed_events] == [date(2024, 7, 1)]
+    assert reviewed_audit.loc[0, "review_status"] == "corrected"
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-07-01"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is True
+
+
+def test_apply_event_date_reviews_supports_whitespace_normalized_preferred_event_review_id_matching(tmp_path: Path) -> None:
+    event_review_id = "AAPL|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    review_file = tmp_path / "whitespace_preferred_review.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                f" {event_review_id} ,AAPL,2024-06-30,2024-07-01,corrected,Preferred review id should still match after normalization",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    reviews = _load_event_date_reviews(review_file)
+
+    events = [
+        ESPPEvent(
+            "AAPL",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            event_review_id,
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/aapl.yaml",
+                "source_id": "fixture_a",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": event_review_id,
+                "included_in_event_study": True,
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert reviews.loc[0, "event_review_id"] == event_review_id
+    assert [event.event_date for event in reviewed_events] == [date(2024, 7, 1)]
+    assert reviewed_audit.loc[0, "review_status"] == "corrected"
+    assert reviewed_audit.loc[0, "effective_event_date"] == "2024-07-01"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is True
+
+
+def test_apply_event_date_reviews_supports_whitespace_normalized_preferred_event_review_id_rejection(tmp_path: Path) -> None:
+    event_review_id = "AAPL|10-K|2024-02-15|fixture_a|06-30|2024-06-30|filing_text_month_day"
+    review_file = tmp_path / "whitespace_preferred_rejected_review.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,reviewed_event_date,review_status,review_note",
+                f" {event_review_id} ,AAPL,2024-06-30,,rejected,Preferred review id should exclude this event after normalization",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    reviews = _load_event_date_reviews(review_file)
+
+    events = [
+        ESPPEvent(
+            "AAPL",
+            date(2024, 6, 30),
+            date(2024, 2, 15),
+            "10-K",
+            0.8,
+            "filing_text_month_day",
+            "fixture",
+            event_review_id,
+        )
+    ]
+    audit = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "filing_type": "10-K",
+                "filing_date": "2024-02-15",
+                "source_fixture_path": "fixtures/sec_filings/aapl.yaml",
+                "source_id": "fixture_a",
+                "candidate_month_day": "06-30",
+                "assigned_event_date": "2024-06-30",
+                "derivation_rule": "filing_text_month_day",
+                "confidence": 0.8,
+                "fallback_anchor_used": False,
+                "event_review_id": event_review_id,
+                "included_in_event_study": True,
+            }
+        ]
+    )
+
+    reviewed_events, reviewed_audit = _apply_event_date_reviews(events, audit, reviews)
+
+    assert reviews.loc[0, "event_review_id"] == event_review_id
+    assert reviewed_events == []
+    assert reviewed_audit.loc[0, "review_status"] == "rejected"
+    assert bool(reviewed_audit.loc[0, "included_in_event_study"]) is False
+    assert pd.isna(reviewed_audit.loc[0, "effective_event_date"])
 
 
 def test_apply_event_date_reviews_prefers_event_review_id_over_legacy_ticker_date_key() -> None:
@@ -844,6 +1267,13 @@ def test_offline_business_day_config_runs_without_live_market_data(monkeypatch: 
     assert not ((all_events["ticker"] == "CRM") & (all_events["event_date"].astype(str) == "2024-07-01")).any()
     assert "2025-06-30" not in all_events["event_date"].astype(str).tolist()
     assert "2025-12-31" not in all_events["event_date"].astype(str).tolist()
+
+    summary_path = output_dir / "reports" / "espp_research_summary.md"
+    assert summary_path.exists()
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert "Research v0.1 fixture smoke summary" in summary_text
+    assert "Descriptive only" in summary_text
+    assert "Not a trading signal" in summary_text
 
 
 def test_business_day_fallback_review_ids_still_match_manual_rejections() -> None:
