@@ -12,6 +12,7 @@ import pandas as pd
 import yaml
 
 from src.analysis.event_study import EventStudyConfig, run_event_study
+from src.analysis.research_summary import write_research_summary_report
 from src.analysis.strategy import (
     CrossSectionConfig,
     StrategyConfig,
@@ -210,6 +211,11 @@ def _load_event_date_reviews(review_file: Path | None) -> pd.DataFrame:
         raise ValueError(f"Review file has invalid review_status values: {invalid_statuses}")
 
     reviews["ticker"] = reviews["ticker"].str.strip()
+    reviews["original_assigned_event_date"] = reviews["original_assigned_event_date"].str.strip()
+    missing_tickers = reviews[reviews["ticker"] == ""]
+    if not missing_tickers.empty:
+        raise ValueError("Review rows require ticker")
+
     reviews["original_assigned_event_date"] = reviews["original_assigned_event_date"].map(
         lambda value: _parse_date(value, "original_assigned_event_date").isoformat() if value else ""
     )
@@ -570,11 +576,15 @@ def run_first_pass_event_study(config_path: Path) -> None:
 
     _persist_date_audit(config.output_dir, audit_frames)
 
+    all_events = pd.concat(all_event_rows, ignore_index=True) if all_event_rows else pd.DataFrame()
+    audit_for_summary = pd.concat(audit_frames, ignore_index=True) if audit_frames else pd.DataFrame()
+    report_path = write_research_summary_report(config.output_dir, audit_for_summary, all_events)
+    LOGGER.info("Wrote descriptive research summary to %s", report_path)
+
     if not all_event_rows:
         LOGGER.warning("No event windows generated across universe.")
         return
 
-    all_events = pd.concat(all_event_rows, ignore_index=True)
     all_events.to_csv(config.output_dir / "all_event_windows.csv", index=False)
     _run_diagnostic_report(all_events, config.output_dir)
 

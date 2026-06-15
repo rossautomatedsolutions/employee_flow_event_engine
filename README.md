@@ -156,6 +156,7 @@ Under `artifacts/` (or configured output dir):
 - `strategy_event_level.csv`
 - `strategy_group_summary.csv`
 - `strategy_overall_summary.csv`
+- `reports/espp_research_summary.md`
 
 `espp_date_audit.csv` captures the date-identification layer used by the study and includes:
 
@@ -176,6 +177,19 @@ Under `artifacts/` (or configured output dir):
 - `review_note`
 - `effective_event_date`
 - `included_in_event_study`
+
+## Offline descriptive research summary
+
+The offline pipeline now also writes `reports/espp_research_summary.md` under the configured output directory.
+
+That report is intentionally narrow:
+
+- it is an offline Research v0.1 fixture smoke summary
+- it is descriptive only and meant for research triage
+- it summarizes review-status counts, derivation-rule counts, included event coverage, event-window generation coverage, and simple return snapshots already present in the offline outputs
+- it explicitly labels tiny fixture samples as insufficient for inference
+
+The summary does not make production ESPP accuracy claims, alpha claims, or trading claims. It is only there to help decide whether the reviewed offline ESPP dataset has enough usable evidence to justify a deeper next research pass.
 
 ## Determinism and reproducibility notes
 
