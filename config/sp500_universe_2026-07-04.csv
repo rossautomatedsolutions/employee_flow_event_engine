@@ -1,0 +1,504 @@
+ticker,company_name,issuer_name,issuer_id,cik,gics_sector,gics_sub_industry,primary_ticker,is_primary_share_class
+A,Agilent Technologies,Agilent Technologies,agilent-technologies,0001090872,Health Care,Life Sciences Tools & Services,A,True
+AAPL,Apple Inc.,Apple Inc.,apple-inc,0000320193,Information Technology,"Technology Hardware, Storage & Peripherals",AAPL,True
+ABBV,AbbVie,AbbVie,abbvie,0001551152,Health Care,Biotechnology,ABBV,True
+ABNB,Airbnb,Airbnb,airbnb,0001559720,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",ABNB,True
+ABT,Abbott Laboratories,Abbott Laboratories,abbott-laboratories,0000001800,Health Care,Health Care Equipment,ABT,True
+ACGL,Arch Capital Group,Arch Capital Group,arch-capital-group,0000947484,Financials,Property & Casualty Insurance,ACGL,True
+ACN,Accenture,Accenture,accenture,0001467373,Information Technology,IT Consulting & Other Services,ACN,True
+ADBE,Adobe Inc.,Adobe Inc.,adobe-inc,0000796343,Information Technology,Application Software,ADBE,True
+ADI,Analog Devices,Analog Devices,analog-devices,0000006281,Information Technology,Semiconductors,ADI,True
+ADM,Archer Daniels Midland,Archer Daniels Midland,archer-daniels-midland,0000007084,Consumer Staples,Agricultural Products & Services,ADM,True
+ADP,Automatic Data Processing,Automatic Data Processing,automatic-data-processing,0000008670,Industrials,Human Resource & Employment Services,ADP,True
+ADSK,Autodesk,Autodesk,autodesk,0000769397,Information Technology,Application Software,ADSK,True
+AEE,Ameren,Ameren,ameren,0001002910,Utilities,Multi-Utilities,AEE,True
+AEP,American Electric Power,American Electric Power,american-electric-power,0000004904,Utilities,Electric Utilities,AEP,True
+AES,AES Corporation,AES Corporation,aes-corporation,0000874761,Utilities,Independent Power Producers & Energy Traders,AES,True
+AFL,Aflac,Aflac,aflac,0000004977,Financials,Life & Health Insurance,AFL,True
+AIG,American International Group,American International Group,american-international-group,0000005272,Financials,Multi-line Insurance,AIG,True
+AIZ,Assurant,Assurant,assurant,0001267238,Financials,Multi-line Insurance,AIZ,True
+AJG,Arthur J. Gallagher & Co.,Arthur J. Gallagher & Co.,arthur-j-gallagher-co,0000354190,Financials,Insurance Brokers,AJG,True
+AKAM,Akamai Technologies,Akamai Technologies,akamai-technologies,0001086222,Information Technology,Internet Services & Infrastructure,AKAM,True
+ALB,Albemarle Corporation,Albemarle Corporation,albemarle-corporation,0000915913,Materials,Specialty Chemicals,ALB,True
+ALGN,Align Technology,Align Technology,align-technology,0001097149,Health Care,Health Care Supplies,ALGN,True
+ALL,Allstate,Allstate,allstate,0000899051,Financials,Property & Casualty Insurance,ALL,True
+ALLE,Allegion,Allegion,allegion,0001579241,Industrials,Building Products,ALLE,True
+AMAT,Applied Materials,Applied Materials,applied-materials,0000006951,Information Technology,Semiconductor Materials & Equipment,AMAT,True
+AMCR,Amcor,Amcor,amcor,0001748790,Materials,Paper & Plastic Packaging Products & Materials,AMCR,True
+AMD,Advanced Micro Devices,Advanced Micro Devices,advanced-micro-devices,0000002488,Information Technology,Semiconductors,AMD,True
+AME,Ametek,Ametek,ametek,0001037868,Industrials,Electrical Components & Equipment,AME,True
+AMGN,Amgen,Amgen,amgen,0000318154,Health Care,Biotechnology,AMGN,True
+AMP,Ameriprise Financial,Ameriprise Financial,ameriprise-financial,0000820027,Financials,Asset Management & Custody Banks,AMP,True
+AMT,American Tower,American Tower,american-tower,0001053507,Real Estate,Telecom Tower REITs,AMT,True
+AMZN,Amazon,Amazon,amazon,0001018724,Consumer Discretionary,Broadline Retail,AMZN,True
+ANET,Arista Networks,Arista Networks,arista-networks,0001596532,Information Technology,Communications Equipment,ANET,True
+AON,Aon plc,Aon plc,aon-plc,0000315293,Financials,Insurance Brokers,AON,True
+AOS,A. O. Smith,A. O. Smith,a-o-smith,0000091142,Industrials,Building Products,AOS,True
+APA,APA Corporation,APA Corporation,apa-corporation,0001841666,Energy,Oil & Gas Exploration & Production,APA,True
+APD,Air Products,Air Products,air-products,0000002969,Materials,Industrial Gases,APD,True
+APH,Amphenol,Amphenol,amphenol,0000820313,Information Technology,Electronic Components,APH,True
+APO,Apollo Global Management,Apollo Global Management,apollo-global-management,0001858681,Financials,Asset Management & Custody Banks,APO,True
+APP,AppLovin,AppLovin,applovin,0001751008,Information Technology,Application Software,APP,True
+APTV,Aptiv,Aptiv,aptiv,0001521332,Consumer Discretionary,Automotive Parts & Equipment,APTV,True
+ARE,Alexandria Real Estate Equities,Alexandria Real Estate Equities,alexandria-real-estate-equities,0001035443,Real Estate,Office REITs,ARE,True
+ARES,Ares Management,Ares Management,ares-management,0001176948,Financials,Asset Management & Custody Banks,ARES,True
+ATO,Atmos Energy,Atmos Energy,atmos-energy,0000731802,Utilities,Gas Utilities,ATO,True
+AVB,AvalonBay Communities,AvalonBay Communities,avalonbay-communities,0000915912,Real Estate,Multi-Family Residential REITs,AVB,True
+AVGO,Broadcom,Broadcom,broadcom,0001730168,Information Technology,Semiconductors,AVGO,True
+AVY,Avery Dennison,Avery Dennison,avery-dennison,0000008818,Materials,Paper & Plastic Packaging Products & Materials,AVY,True
+AWK,American Water Works,American Water Works,american-water-works,0001410636,Utilities,Water Utilities,AWK,True
+AXON,Axon Enterprise,Axon Enterprise,axon-enterprise,0001069183,Industrials,Aerospace & Defense,AXON,True
+AXP,American Express,American Express,american-express,0000004962,Financials,Consumer Finance,AXP,True
+AZO,AutoZone,AutoZone,autozone,0000866787,Consumer Discretionary,Automotive Retail,AZO,True
+BA,Boeing,Boeing,boeing,0000012927,Industrials,Aerospace & Defense,BA,True
+BAC,Bank of America,Bank of America,bank-of-america,0000070858,Financials,Diversified Banks,BAC,True
+BALL,Ball Corporation,Ball Corporation,ball-corporation,0000009389,Materials,"Metal, Glass & Plastic Containers",BALL,True
+BAX,Baxter International,Baxter International,baxter-international,0000010456,Health Care,Health Care Equipment,BAX,True
+BBY,Best Buy,Best Buy,best-buy,0000764478,Consumer Discretionary,Computer & Electronics Retail,BBY,True
+BDX,Becton Dickinson,Becton Dickinson,becton-dickinson,0000010795,Health Care,Health Care Equipment,BDX,True
+BEN,Franklin Resources,Franklin Resources,franklin-resources,0000038777,Financials,Asset Management & Custody Banks,BEN,True
+BF.B,Brown–Forman,Brown–Forman,brown-forman,0000014693,Consumer Staples,Distillers & Vintners,BF.B,True
+BG,Bunge Global,Bunge Global,bunge-global,0001996862,Consumer Staples,Agricultural Products & Services,BG,True
+BIIB,Biogen,Biogen,biogen,0000875045,Health Care,Biotechnology,BIIB,True
+BKNG,Booking Holdings,Booking Holdings,booking-holdings,0001075531,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",BKNG,True
+BKR,Baker Hughes,Baker Hughes,baker-hughes,0001701605,Energy,Oil & Gas Equipment & Services,BKR,True
+BLDR,Builders FirstSource,Builders FirstSource,builders-firstsource,0001316835,Industrials,Building Products,BLDR,True
+BLK,BlackRock,BlackRock,blackrock,0002012383,Financials,Asset Management & Custody Banks,BLK,True
+BMY,Bristol Myers Squibb,Bristol Myers Squibb,bristol-myers-squibb,0000014272,Health Care,Pharmaceuticals,BMY,True
+BNY,BNY Mellon,BNY Mellon,bny-mellon,0001390777,Financials,Asset Management & Custody Banks,BNY,True
+BR,Broadridge Financial Solutions,Broadridge Financial Solutions,broadridge-financial-solutions,0001383312,Industrials,Data Processing & Outsourced Services,BR,True
+BRK.B,Berkshire Hathaway,Berkshire Hathaway,berkshire-hathaway,0001067983,Financials,Multi-Sector Holdings,BRK.B,True
+BRO,Brown & Brown,Brown & Brown,brown-brown,0000079282,Financials,Insurance Brokers,BRO,True
+BSX,Boston Scientific,Boston Scientific,boston-scientific,0000885725,Health Care,Health Care Equipment,BSX,True
+BX,Blackstone Inc.,Blackstone Inc.,blackstone-inc,0001393818,Financials,Asset Management & Custody Banks,BX,True
+BXP,"BXP, Inc.","BXP, Inc.",bxp-inc,0001037540,Real Estate,Office REITs,BXP,True
+C,Citigroup,Citigroup,citigroup,0000831001,Financials,Diversified Banks,C,True
+CAH,Cardinal Health,Cardinal Health,cardinal-health,0000721371,Health Care,Health Care Distributors,CAH,True
+CARR,Carrier Global,Carrier Global,carrier-global,0001783180,Industrials,Building Products,CARR,True
+CASY,Casey's,Casey's,casey-s,0000726958,Consumer Staples,Food Retail,CASY,True
+CAT,Caterpillar Inc.,Caterpillar Inc.,caterpillar-inc,0000018230,Industrials,Construction Machinery & Heavy Transportation Equipment,CAT,True
+CB,Chubb Limited,Chubb Limited,chubb-limited,0000896159,Financials,Property & Casualty Insurance,CB,True
+CBOE,Cboe Global Markets,Cboe Global Markets,cboe-global-markets,0001374310,Financials,Financial Exchanges & Data,CBOE,True
+CBRE,CBRE Group,CBRE Group,cbre-group,0001138118,Real Estate,Real Estate Services,CBRE,True
+CCI,Crown Castle,Crown Castle,crown-castle,0001051470,Real Estate,Telecom Tower REITs,CCI,True
+CCL,Carnival Corporation,Carnival Corporation,carnival-corporation,0000815097,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",CCL,True
+CDNS,Cadence Design Systems,Cadence Design Systems,cadence-design-systems,0000813672,Information Technology,Application Software,CDNS,True
+CDW,CDW Corporation,CDW Corporation,cdw-corporation,0001402057,Information Technology,Technology Distributors,CDW,True
+CEG,Constellation Energy,Constellation Energy,constellation-energy,0001868275,Utilities,Electric Utilities,CEG,True
+CF,CF Industries,CF Industries,cf-industries,0001324404,Materials,Fertilizers & Agricultural Chemicals,CF,True
+CFG,Citizens Financial Group,Citizens Financial Group,citizens-financial-group,0000759944,Financials,Regional Banks,CFG,True
+CHD,Church & Dwight,Church & Dwight,church-dwight,0000313927,Consumer Staples,Household Products,CHD,True
+CHRW,C.H. Robinson,C.H. Robinson,c-h-robinson,0001043277,Industrials,Air Freight & Logistics,CHRW,True
+CHTR,Charter Communications,Charter Communications,charter-communications,0001091667,Communication Services,Cable & Satellite,CHTR,True
+CI,Cigna,Cigna,cigna,0001739940,Health Care,Health Care Services,CI,True
+CIEN,Ciena,Ciena,ciena,0000936395,Information Technology,Communications Equipment,CIEN,True
+CINF,Cincinnati Financial,Cincinnati Financial,cincinnati-financial,0000020286,Financials,Property & Casualty Insurance,CINF,True
+CL,Colgate-Palmolive,Colgate-Palmolive,colgate-palmolive,0000021665,Consumer Staples,Household Products,CL,True
+CLX,Clorox,Clorox,clorox,0000021076,Consumer Staples,Household Products,CLX,True
+CMCSA,Comcast,Comcast,comcast,0001166691,Communication Services,Cable & Satellite,CMCSA,True
+CME,CME Group,CME Group,cme-group,0001156375,Financials,Financial Exchanges & Data,CME,True
+CMG,Chipotle Mexican Grill,Chipotle Mexican Grill,chipotle-mexican-grill,0001058090,Consumer Discretionary,Restaurants,CMG,True
+CMI,Cummins,Cummins,cummins,0000026172,Industrials,Construction Machinery & Heavy Transportation Equipment,CMI,True
+CMS,CMS Energy,CMS Energy,cms-energy,0000811156,Utilities,Multi-Utilities,CMS,True
+CNC,Centene Corporation,Centene Corporation,centene-corporation,0001071739,Health Care,Managed Health Care,CNC,True
+CNP,CenterPoint Energy,CenterPoint Energy,centerpoint-energy,0001130310,Utilities,Multi-Utilities,CNP,True
+COF,Capital One,Capital One,capital-one,0000927628,Financials,Consumer Finance,COF,True
+COHR,Coherent Corp.,Coherent Corp.,coherent-corp,0000820318,Information Technology,Electronic Components,COHR,True
+COIN,Coinbase,Coinbase,coinbase,0001679788,Financials,Financial Exchanges & Data,COIN,True
+COO,Cooper Companies (The),Cooper Companies (The),cooper-companies-the,0000711404,Health Care,Health Care Supplies,COO,True
+COP,ConocoPhillips,ConocoPhillips,conocophillips,0001163165,Energy,Oil & Gas Exploration & Production,COP,True
+COR,Cencora,Cencora,cencora,0001140859,Health Care,Health Care Distributors,COR,True
+COST,Costco,Costco,costco,0000909832,Consumer Staples,Consumer Staples Merchandise Retail,COST,True
+CPAY,Corpay,Corpay,corpay,0001175454,Financials,Transaction & Payment Processing Services,CPAY,True
+CPRT,Copart,Copart,copart,0000900075,Industrials,Diversified Support Services,CPRT,True
+CPT,Camden Property Trust,Camden Property Trust,camden-property-trust,0000906345,Real Estate,Multi-Family Residential REITs,CPT,True
+CRH,CRH plc,CRH plc,crh-plc,0000849395,Materials,Construction Materials,CRH,True
+CRL,Charles River Laboratories,Charles River Laboratories,charles-river-laboratories,0001100682,Health Care,Life Sciences Tools & Services,CRL,True
+CRM,Salesforce,Salesforce,salesforce,0001108524,Information Technology,Application Software,CRM,True
+CRWD,CrowdStrike,CrowdStrike,crowdstrike,0001535527,Information Technology,Systems Software,CRWD,True
+CSCO,Cisco,Cisco,cisco,0000858877,Information Technology,Communications Equipment,CSCO,True
+CSGP,CoStar Group,CoStar Group,costar-group,0001057352,Real Estate,Real Estate Services,CSGP,True
+CSX,CSX Corporation,CSX Corporation,csx-corporation,0000277948,Industrials,Rail Transportation,CSX,True
+CTAS,Cintas,Cintas,cintas,0000723254,Industrials,Diversified Support Services,CTAS,True
+CTSH,Cognizant,Cognizant,cognizant,0001058290,Information Technology,IT Consulting & Other Services,CTSH,True
+CTVA,Corteva,Corteva,corteva,0001755672,Materials,Fertilizers & Agricultural Chemicals,CTVA,True
+CVNA,Carvana,Carvana,carvana,0001690820,Consumer Discretionary,Automotive Retail,CVNA,True
+CVS,CVS Health,CVS Health,cvs-health,0000064803,Health Care,Health Care Services,CVS,True
+CVX,Chevron Corporation,Chevron Corporation,chevron-corporation,0000093410,Energy,Integrated Oil & Gas,CVX,True
+D,Dominion Energy,Dominion Energy,dominion-energy,0000715957,Utilities,Multi-Utilities,D,True
+DAL,Delta Air Lines,Delta Air Lines,delta-air-lines,0000027904,Industrials,Passenger Airlines,DAL,True
+DASH,DoorDash,DoorDash,doordash,0001792789,Consumer Discretionary,Specialized Consumer Services,DASH,True
+DD,DuPont,DuPont,dupont,0001666700,Materials,Specialty Chemicals,DD,True
+DDOG,Datadog,Datadog,datadog,0001561550,Information Technology,Application Software,DDOG,True
+DE,Deere & Company,Deere & Company,deere-company,0000315189,Industrials,Agricultural & Farm Machinery,DE,True
+DECK,Deckers Brands,Deckers Brands,deckers-brands,0000910521,Consumer Discretionary,Footwear,DECK,True
+DELL,Dell Technologies,Dell Technologies,dell-technologies,0001571996,Information Technology,"Technology Hardware, Storage & Peripherals",DELL,True
+DG,Dollar General,Dollar General,dollar-general,0000029534,Consumer Staples,Consumer Staples Merchandise Retail,DG,True
+DGX,Quest Diagnostics,Quest Diagnostics,quest-diagnostics,0001022079,Health Care,Health Care Services,DGX,True
+DHI,D. R. Horton,D. R. Horton,d-r-horton,0000882184,Consumer Discretionary,Homebuilding,DHI,True
+DHR,Danaher Corporation,Danaher Corporation,danaher-corporation,0000313616,Health Care,Life Sciences Tools & Services,DHR,True
+DIS,Walt Disney Company (The),Walt Disney Company (The),walt-disney-company-the,0001744489,Communication Services,Movies & Entertainment,DIS,True
+DLR,Digital Realty,Digital Realty,digital-realty,0001297996,Real Estate,Data Center REITs,DLR,True
+DLTR,Dollar Tree,Dollar Tree,dollar-tree,0000935703,Consumer Staples,Consumer Staples Merchandise Retail,DLTR,True
+DOC,Healthpeak Properties,Healthpeak Properties,healthpeak-properties,0000765880,Real Estate,Health Care REITs,DOC,True
+DOV,Dover Corporation,Dover Corporation,dover-corporation,0000029905,Industrials,Industrial Machinery & Supplies & Components,DOV,True
+DOW,Dow Inc.,Dow Inc.,dow-inc,0001751788,Materials,Commodity Chemicals,DOW,True
+DPZ,Domino's,Domino's,domino-s,0001286681,Consumer Discretionary,Restaurants,DPZ,True
+DRI,Darden Restaurants,Darden Restaurants,darden-restaurants,0000940944,Consumer Discretionary,Restaurants,DRI,True
+DTE,DTE Energy,DTE Energy,dte-energy,0000936340,Utilities,Multi-Utilities,DTE,True
+DUK,Duke Energy,Duke Energy,duke-energy,0001326160,Utilities,Electric Utilities,DUK,True
+DVA,DaVita,DaVita,davita,0000927066,Health Care,Health Care Services,DVA,True
+DVN,Devon Energy,Devon Energy,devon-energy,0001090012,Energy,Oil & Gas Exploration & Production,DVN,True
+DXCM,Dexcom,Dexcom,dexcom,0001093557,Health Care,Health Care Equipment,DXCM,True
+EA,Electronic Arts,Electronic Arts,electronic-arts,0000712515,Communication Services,Interactive Home Entertainment,EA,True
+EBAY,eBay Inc.,eBay Inc.,ebay-inc,0001065088,Consumer Discretionary,Broadline Retail,EBAY,True
+ECHO,EchoStar,EchoStar,echostar,0001415404,Communication Services,Wireless Telecommunication Services,ECHO,True
+ECL,Ecolab,Ecolab,ecolab,0000031462,Materials,Specialty Chemicals,ECL,True
+ED,Consolidated Edison,Consolidated Edison,consolidated-edison,0001047862,Utilities,Multi-Utilities,ED,True
+EFX,Equifax,Equifax,equifax,0000033185,Industrials,Research & Consulting Services,EFX,True
+EG,Everest Group,Everest Group,everest-group,0001095073,Financials,Reinsurance,EG,True
+EIX,Edison International,Edison International,edison-international,0000827052,Utilities,Electric Utilities,EIX,True
+EL,Estée Lauder Companies (The),Estée Lauder Companies (The),est-e-lauder-companies-the,0001001250,Consumer Staples,Personal Care Products,EL,True
+ELV,Elevance Health,Elevance Health,elevance-health,0001156039,Health Care,Managed Health Care,ELV,True
+EME,Emcor,Emcor,emcor,0000105634,Industrials,Construction & Engineering,EME,True
+EMR,Emerson Electric,Emerson Electric,emerson-electric,0000032604,Industrials,Electrical Components & Equipment,EMR,True
+EOG,EOG Resources,EOG Resources,eog-resources,0000821189,Energy,Oil & Gas Exploration & Production,EOG,True
+EQIX,Equinix,Equinix,equinix,0001101239,Real Estate,Data Center REITs,EQIX,True
+EQR,Equity Residential,Equity Residential,equity-residential,0000906107,Real Estate,Multi-Family Residential REITs,EQR,True
+EQT,EQT Corporation,EQT Corporation,eqt-corporation,0000033213,Energy,Oil & Gas Exploration & Production,EQT,True
+ERIE,Erie Indemnity,Erie Indemnity,erie-indemnity,0000922621,Financials,Insurance Brokers,ERIE,True
+ES,Eversource Energy,Eversource Energy,eversource-energy,0000072741,Utilities,Electric Utilities,ES,True
+ESS,Essex Property Trust,Essex Property Trust,essex-property-trust,0000920522,Real Estate,Multi-Family Residential REITs,ESS,True
+ETN,Eaton Corporation,Eaton Corporation,eaton-corporation,0001551182,Industrials,Electrical Components & Equipment,ETN,True
+ETR,Entergy,Entergy,entergy,0000065984,Utilities,Electric Utilities,ETR,True
+EVRG,Evergy,Evergy,evergy,0001711269,Utilities,Electric Utilities,EVRG,True
+EW,Edwards Lifesciences,Edwards Lifesciences,edwards-lifesciences,0001099800,Health Care,Health Care Equipment,EW,True
+EXC,Exelon,Exelon,exelon,0001109357,Utilities,Electric Utilities,EXC,True
+EXE,Expand Energy,Expand Energy,expand-energy,0000895126,Energy,Oil & Gas Exploration & Production,EXE,True
+EXPD,Expeditors International,Expeditors International,expeditors-international,0000746515,Industrials,Air Freight & Logistics,EXPD,True
+EXPE,Expedia Group,Expedia Group,expedia-group,0001324424,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",EXPE,True
+EXR,Extra Space Storage,Extra Space Storage,extra-space-storage,0001289490,Real Estate,Self-Storage REITs,EXR,True
+F,Ford Motor Company,Ford Motor Company,ford-motor-company,0000037996,Consumer Discretionary,Automobile Manufacturers,F,True
+FANG,Diamondback Energy,Diamondback Energy,diamondback-energy,0001539838,Energy,Oil & Gas Exploration & Production,FANG,True
+FAST,Fastenal,Fastenal,fastenal,0000815556,Industrials,Trading Companies & Distributors,FAST,True
+FCX,Freeport-McMoRan,Freeport-McMoRan,freeport-mcmoran,0000831259,Materials,Copper,FCX,True
+FDS,FactSet,FactSet,factset,0001013237,Financials,Financial Exchanges & Data,FDS,True
+FDX,FedEx,FedEx,fedex,0001048911,Industrials,Air Freight & Logistics,FDX,True
+FDXF,FedEx Freight,FedEx Freight,fedex-freight,0002082247,Industrials,Cargo Ground Transportation,FDXF,True
+FE,FirstEnergy,FirstEnergy,firstenergy,0001031296,Utilities,Electric Utilities,FE,True
+FFIV,"F5, Inc.","F5, Inc.",f5-inc,0001048695,Information Technology,Communications Equipment,FFIV,True
+FICO,Fair Isaac,Fair Isaac,fair-isaac,0000814547,Information Technology,Application Software,FICO,True
+FIS,Fidelity National Information Services,Fidelity National Information Services,fidelity-national-information-services,0001136893,Financials,Transaction & Payment Processing Services,FIS,True
+FISV,Fiserv,Fiserv,fiserv,0000798354,Financials,Transaction & Payment Processing Services,FISV,True
+FITB,Fifth Third Bancorp,Fifth Third Bancorp,fifth-third-bancorp,0000035527,Financials,Regional Banks,FITB,True
+FIX,Comfort Systems USA,Comfort Systems USA,comfort-systems-usa,0001035983,Industrials,Construction & Engineering,FIX,True
+FLEX,Flex Ltd.,Flex Ltd.,flex-ltd,0000866374,Information Technology,Electronic Manufacturing Services,FLEX,True
+FOX,Fox Corporation (Class B),Fox Corporation,fox-corporation,0001754301,Communication Services,Broadcasting,FOXA,False
+FOXA,Fox Corporation (Class A),Fox Corporation,fox-corporation,0001754301,Communication Services,Broadcasting,FOXA,True
+FRT,Federal Realty Investment Trust,Federal Realty Investment Trust,federal-realty-investment-trust,0000034903,Real Estate,Retail REITs,FRT,True
+FSLR,First Solar,First Solar,first-solar,0001274494,Information Technology,Semiconductors,FSLR,True
+FTNT,Fortinet,Fortinet,fortinet,0001262039,Information Technology,Systems Software,FTNT,True
+FTV,Fortive,Fortive,fortive,0001659166,Industrials,Industrial Machinery & Supplies & Components,FTV,True
+GD,General Dynamics,General Dynamics,general-dynamics,0000040533,Industrials,Aerospace & Defense,GD,True
+GDDY,GoDaddy,GoDaddy,godaddy,0001609711,Information Technology,Internet Services & Infrastructure,GDDY,True
+GE,GE Aerospace,GE Aerospace,ge-aerospace,0000040545,Industrials,Aerospace & Defense,GE,True
+GEHC,GE HealthCare,GE HealthCare,ge-healthcare,0001932393,Health Care,Health Care Equipment,GEHC,True
+GEN,Gen Digital,Gen Digital,gen-digital,0000849399,Information Technology,Systems Software,GEN,True
+GEV,GE Vernova,GE Vernova,ge-vernova,0001996810,Industrials,Heavy Electrical Equipment,GEV,True
+GILD,Gilead Sciences,Gilead Sciences,gilead-sciences,0000882095,Health Care,Biotechnology,GILD,True
+GIS,General Mills,General Mills,general-mills,0000040704,Consumer Staples,Packaged Foods & Meats,GIS,True
+GL,Globe Life,Globe Life,globe-life,0000320335,Financials,Life & Health Insurance,GL,True
+GLW,Corning Inc.,Corning Inc.,corning-inc,0000024741,Information Technology,Electronic Components,GLW,True
+GM,General Motors,General Motors,general-motors,0001467858,Consumer Discretionary,Automobile Manufacturers,GM,True
+GNRC,Generac,Generac,generac,0001474735,Industrials,Electrical Components & Equipment,GNRC,True
+GOOG,Alphabet Inc. (Class C),Alphabet Inc.,alphabet-inc,0001652044,Communication Services,Interactive Media & Services,GOOGL,False
+GOOGL,Alphabet Inc. (Class A),Alphabet Inc.,alphabet-inc,0001652044,Communication Services,Interactive Media & Services,GOOGL,True
+GPC,Genuine Parts Company,Genuine Parts Company,genuine-parts-company,0000040987,Consumer Discretionary,Distributors,GPC,True
+GPN,Global Payments,Global Payments,global-payments,0001123360,Financials,Transaction & Payment Processing Services,GPN,True
+GRMN,Garmin,Garmin,garmin,0001121788,Consumer Discretionary,Consumer Electronics,GRMN,True
+GS,Goldman Sachs,Goldman Sachs,goldman-sachs,0000886982,Financials,Investment Banking & Brokerage,GS,True
+GWW,W. W. Grainger,W. W. Grainger,w-w-grainger,0000277135,Industrials,Industrial Machinery & Supplies & Components,GWW,True
+HAL,Halliburton,Halliburton,halliburton,0000045012,Energy,Oil & Gas Equipment & Services,HAL,True
+HAS,Hasbro,Hasbro,hasbro,0000046080,Consumer Discretionary,Leisure Products,HAS,True
+HBAN,Huntington Bancshares,Huntington Bancshares,huntington-bancshares,0000049196,Financials,Regional Banks,HBAN,True
+HCA,HCA Healthcare,HCA Healthcare,hca-healthcare,0000860730,Health Care,Health Care Facilities,HCA,True
+HD,Home Depot (The),Home Depot (The),home-depot-the,0000354950,Consumer Discretionary,Home Improvement Retail,HD,True
+HIG,Hartford (The),Hartford (The),hartford-the,0000874766,Financials,Property & Casualty Insurance,HIG,True
+HII,Huntington Ingalls Industries,Huntington Ingalls Industries,huntington-ingalls-industries,0001501585,Industrials,Aerospace & Defense,HII,True
+HLT,Hilton Worldwide,Hilton Worldwide,hilton-worldwide,0001585689,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",HLT,True
+HON,Honeywell Technologies,Honeywell Technologies,honeywell-technologies,0000773840,Industrials,Industrial Conglomerates,HON,True
+HONA,Honeywell Aerospace,Honeywell Aerospace,honeywell-aerospace,0002089271,Industrials,Aerospace & Defense,HONA,True
+HOOD,Robinhood Markets,Robinhood Markets,robinhood-markets,0001783879,Financials,Investment Banking & Brokerage,HOOD,True
+HPE,Hewlett Packard Enterprise,Hewlett Packard Enterprise,hewlett-packard-enterprise,0001645590,Information Technology,"Technology Hardware, Storage & Peripherals",HPE,True
+HPQ,HP Inc.,HP Inc.,hp-inc,0000047217,Information Technology,"Technology Hardware, Storage & Peripherals",HPQ,True
+HRL,Hormel Foods,Hormel Foods,hormel-foods,0000048465,Consumer Staples,Packaged Foods & Meats,HRL,True
+HSIC,Henry Schein,Henry Schein,henry-schein,0001000228,Health Care,Health Care Distributors,HSIC,True
+HST,Host Hotels & Resorts,Host Hotels & Resorts,host-hotels-resorts,0001070750,Real Estate,Hotel & Resort REITs,HST,True
+HSY,Hershey Company (The),Hershey Company (The),hershey-company-the,0000047111,Consumer Staples,Packaged Foods & Meats,HSY,True
+HUBB,Hubbell Incorporated,Hubbell Incorporated,hubbell-incorporated,0000048898,Industrials,Industrial Machinery & Supplies & Components,HUBB,True
+HUM,Humana,Humana,humana,0000049071,Health Care,Managed Health Care,HUM,True
+HWM,Howmet Aerospace,Howmet Aerospace,howmet-aerospace,0000004281,Industrials,Aerospace & Defense,HWM,True
+IBKR,Interactive Brokers,Interactive Brokers,interactive-brokers,0001381197,Financials,Investment Banking & Brokerage,IBKR,True
+IBM,IBM,IBM,ibm,0000051143,Information Technology,IT Consulting & Other Services,IBM,True
+ICE,Intercontinental Exchange,Intercontinental Exchange,intercontinental-exchange,0001571949,Financials,Financial Exchanges & Data,ICE,True
+IDXX,Idexx Laboratories,Idexx Laboratories,idexx-laboratories,0000874716,Health Care,Health Care Equipment,IDXX,True
+IEX,IDEX Corporation,IDEX Corporation,idex-corporation,0000832101,Industrials,Industrial Machinery & Supplies & Components,IEX,True
+IFF,International Flavors & Fragrances,International Flavors & Fragrances,international-flavors-fragrances,0000051253,Materials,Specialty Chemicals,IFF,True
+INCY,Incyte,Incyte,incyte,0000879169,Health Care,Biotechnology,INCY,True
+INTC,Intel,Intel,intel,0000050863,Information Technology,Semiconductors,INTC,True
+INTU,Intuit,Intuit,intuit,0000896878,Information Technology,Application Software,INTU,True
+INVH,Invitation Homes,Invitation Homes,invitation-homes,0001687229,Real Estate,Single-Family Residential REITs,INVH,True
+IP,International Paper,International Paper,international-paper,0000051434,Materials,Paper & Plastic Packaging Products & Materials,IP,True
+IQV,IQVIA,IQVIA,iqvia,0001478242,Health Care,Life Sciences Tools & Services,IQV,True
+IR,Ingersoll Rand,Ingersoll Rand,ingersoll-rand,0001699150,Industrials,Industrial Machinery & Supplies & Components,IR,True
+IRM,Iron Mountain,Iron Mountain,iron-mountain,0001020569,Real Estate,Other Specialized REITs,IRM,True
+ISRG,Intuitive Surgical,Intuitive Surgical,intuitive-surgical,0001035267,Health Care,Health Care Equipment,ISRG,True
+IT,Gartner,Gartner,gartner,0000749251,Information Technology,IT Consulting & Other Services,IT,True
+ITW,Illinois Tool Works,Illinois Tool Works,illinois-tool-works,0000049826,Industrials,Industrial Machinery & Supplies & Components,ITW,True
+IVZ,Invesco,Invesco,invesco,0000914208,Financials,Asset Management & Custody Banks,IVZ,True
+J,Jacobs Solutions,Jacobs Solutions,jacobs-solutions,0000052988,Industrials,Construction & Engineering,J,True
+JBHT,J.B. Hunt,J.B. Hunt,j-b-hunt,0000728535,Industrials,Cargo Ground Transportation,JBHT,True
+JBL,Jabil,Jabil,jabil,0000898293,Information Technology,Electronic Manufacturing Services,JBL,True
+JCI,Johnson Controls,Johnson Controls,johnson-controls,0000833444,Industrials,Building Products,JCI,True
+JKHY,Jack Henry & Associates,Jack Henry & Associates,jack-henry-associates,0000779152,Financials,Transaction & Payment Processing Services,JKHY,True
+JNJ,Johnson & Johnson,Johnson & Johnson,johnson-johnson,0000200406,Health Care,Pharmaceuticals,JNJ,True
+JPM,JPMorgan Chase,JPMorgan Chase,jpmorgan-chase,0000019617,Financials,Diversified Banks,JPM,True
+KDP,Keurig Dr Pepper,Keurig Dr Pepper,keurig-dr-pepper,0001418135,Consumer Staples,Soft Drinks & Non-alcoholic Beverages,KDP,True
+KEY,KeyCorp,KeyCorp,keycorp,0000091576,Financials,Regional Banks,KEY,True
+KEYS,Keysight Technologies,Keysight Technologies,keysight-technologies,0001601046,Information Technology,Electronic Equipment & Instruments,KEYS,True
+KHC,Kraft Heinz,Kraft Heinz,kraft-heinz,0001637459,Consumer Staples,Packaged Foods & Meats,KHC,True
+KIM,Kimco Realty,Kimco Realty,kimco-realty,0000879101,Real Estate,Retail REITs,KIM,True
+KKR,KKR & Co.,KKR & Co.,kkr-co,0001404912,Financials,Asset Management & Custody Banks,KKR,True
+KLAC,KLA Corporation,KLA Corporation,kla-corporation,0000319201,Information Technology,Semiconductor Materials & Equipment,KLAC,True
+KMB,Kimberly-Clark,Kimberly-Clark,kimberly-clark,0000055785,Consumer Staples,Household Products,KMB,True
+KMI,Kinder Morgan,Kinder Morgan,kinder-morgan,0001506307,Energy,Oil & Gas Storage & Transportation,KMI,True
+KO,Coca-Cola Company (The),Coca-Cola Company (The),coca-cola-company-the,0000021344,Consumer Staples,Soft Drinks & Non-alcoholic Beverages,KO,True
+KR,Kroger,Kroger,kroger,0000056873,Consumer Staples,Food Retail,KR,True
+KVUE,Kenvue,Kenvue,kenvue,0001944048,Consumer Staples,Personal Care Products,KVUE,True
+L,Loews Corporation,Loews Corporation,loews-corporation,0000060086,Financials,Multi-line Insurance,L,True
+LDOS,Leidos,Leidos,leidos,0001336920,Industrials,Diversified Support Services,LDOS,True
+LEN,Lennar,Lennar,lennar,0000920760,Consumer Discretionary,Homebuilding,LEN,True
+LH,Labcorp,Labcorp,labcorp,0000920148,Health Care,Health Care Services,LH,True
+LHX,L3Harris,L3Harris,l3harris,0000202058,Industrials,Aerospace & Defense,LHX,True
+LII,Lennox International,Lennox International,lennox-international,0001069202,Industrials,Building Products,LII,True
+LIN,Linde plc,Linde plc,linde-plc,0001707925,Materials,Industrial Gases,LIN,True
+LITE,Lumentum,Lumentum,lumentum,0001633978,Information Technology,Communications Equipment,LITE,True
+LLY,Lilly (Eli),Lilly (Eli),lilly-eli,0000059478,Health Care,Pharmaceuticals,LLY,True
+LMT,Lockheed Martin,Lockheed Martin,lockheed-martin,0000936468,Industrials,Aerospace & Defense,LMT,True
+LNT,Alliant Energy,Alliant Energy,alliant-energy,0000352541,Utilities,Electric Utilities,LNT,True
+LOW,Lowe's,Lowe's,lowe-s,0000060667,Consumer Discretionary,Home Improvement Retail,LOW,True
+LRCX,Lam Research,Lam Research,lam-research,0000707549,Information Technology,Semiconductor Materials & Equipment,LRCX,True
+LULU,Lululemon Athletica,Lululemon Athletica,lululemon-athletica,0001397187,Consumer Discretionary,"Apparel, Accessories & Luxury Goods",LULU,True
+LUV,Southwest Airlines,Southwest Airlines,southwest-airlines,0000092380,Industrials,Passenger Airlines,LUV,True
+LVS,Las Vegas Sands,Las Vegas Sands,las-vegas-sands,0001300514,Consumer Discretionary,Casinos & Gaming,LVS,True
+LYB,LyondellBasell,LyondellBasell,lyondellbasell,0001489393,Materials,Specialty Chemicals,LYB,True
+LYV,Live Nation Entertainment,Live Nation Entertainment,live-nation-entertainment,0001335258,Communication Services,Movies & Entertainment,LYV,True
+MA,Mastercard,Mastercard,mastercard,0001141391,Financials,Transaction & Payment Processing Services,MA,True
+MAA,Mid-America Apartment Communities,Mid-America Apartment Communities,mid-america-apartment-communities,0000912595,Real Estate,Multi-Family Residential REITs,MAA,True
+MAR,Marriott International,Marriott International,marriott-international,0001048286,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",MAR,True
+MAS,Masco,Masco,masco,0000062996,Industrials,Building Products,MAS,True
+MCD,McDonald's,McDonald's,mcdonald-s,0000063908,Consumer Discretionary,Restaurants,MCD,True
+MCHP,Microchip Technology,Microchip Technology,microchip-technology,0000827054,Information Technology,Semiconductors,MCHP,True
+MCK,McKesson Corporation,McKesson Corporation,mckesson-corporation,0000927653,Health Care,Health Care Distributors,MCK,True
+MCO,Moody's Corporation,Moody's Corporation,moody-s-corporation,0001059556,Financials,Financial Exchanges & Data,MCO,True
+MDLZ,Mondelez International,Mondelez International,mondelez-international,0001103982,Consumer Staples,Packaged Foods & Meats,MDLZ,True
+MDT,Medtronic,Medtronic,medtronic,0001613103,Health Care,Health Care Equipment,MDT,True
+MET,MetLife,MetLife,metlife,0001099219,Financials,Life & Health Insurance,MET,True
+META,Meta Platforms,Meta Platforms,meta-platforms,0001326801,Communication Services,Interactive Media & Services,META,True
+MGM,MGM Resorts,MGM Resorts,mgm-resorts,0000789570,Consumer Discretionary,Casinos & Gaming,MGM,True
+MKC,McCormick & Company,McCormick & Company,mccormick-company,0000063754,Consumer Staples,Packaged Foods & Meats,MKC,True
+MLM,Martin Marietta Materials,Martin Marietta Materials,martin-marietta-materials,0000916076,Materials,Construction Materials,MLM,True
+MMM,3M,3M,3m,0000066740,Industrials,Industrial Conglomerates,MMM,True
+MNST,Monster Beverage,Monster Beverage,monster-beverage,0000865752,Consumer Staples,Soft Drinks & Non-alcoholic Beverages,MNST,True
+MO,Altria,Altria,altria,0000764180,Consumer Staples,Tobacco,MO,True
+MOS,Mosaic Company (The),Mosaic Company (The),mosaic-company-the,0001285785,Materials,Fertilizers & Agricultural Chemicals,MOS,True
+MPC,Marathon Petroleum,Marathon Petroleum,marathon-petroleum,0001510295,Energy,Oil & Gas Refining & Marketing,MPC,True
+MPWR,Monolithic Power Systems,Monolithic Power Systems,monolithic-power-systems,0001280452,Information Technology,Semiconductors,MPWR,True
+MRK,Merck & Co.,Merck & Co.,merck-co,0000310158,Health Care,Pharmaceuticals,MRK,True
+MRNA,Moderna,Moderna,moderna,0001682852,Health Care,Biotechnology,MRNA,True
+MRSH,Marsh McLennan,Marsh McLennan,marsh-mclennan,0000062709,Financials,Insurance Brokers,MRSH,True
+MRVL,Marvell Technology,Marvell Technology,marvell-technology,0001835632,Information Technology,Semiconductors,MRVL,True
+MS,Morgan Stanley,Morgan Stanley,morgan-stanley,0000895421,Financials,Investment Banking & Brokerage,MS,True
+MSCI,MSCI Inc.,MSCI Inc.,msci-inc,0001408198,Financials,Financial Exchanges & Data,MSCI,True
+MSFT,Microsoft,Microsoft,microsoft,0000789019,Information Technology,Systems Software,MSFT,True
+MSI,Motorola Solutions,Motorola Solutions,motorola-solutions,0000068505,Information Technology,Communications Equipment,MSI,True
+MTB,M&T Bank,M&T Bank,m-t-bank,0000036270,Financials,Regional Banks,MTB,True
+MTD,Mettler Toledo,Mettler Toledo,mettler-toledo,0001037646,Health Care,Life Sciences Tools & Services,MTD,True
+MU,Micron Technology,Micron Technology,micron-technology,0000723125,Information Technology,Semiconductors,MU,True
+NCLH,Norwegian Cruise Line Holdings,Norwegian Cruise Line Holdings,norwegian-cruise-line-holdings,0001513761,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",NCLH,True
+NDAQ,"Nasdaq, Inc.","Nasdaq, Inc.",nasdaq-inc,0001120193,Financials,Financial Exchanges & Data,NDAQ,True
+NDSN,Nordson Corporation,Nordson Corporation,nordson-corporation,0000072331,Industrials,Industrial Machinery & Supplies & Components,NDSN,True
+NEE,NextEra Energy,NextEra Energy,nextera-energy,0000753308,Utilities,Multi-Utilities,NEE,True
+NEM,Newmont,Newmont,newmont,0001164727,Materials,Gold,NEM,True
+NFLX,Netflix,Netflix,netflix,0001065280,Communication Services,Movies & Entertainment,NFLX,True
+NI,NiSource,NiSource,nisource,0001111711,Utilities,Multi-Utilities,NI,True
+NKE,"Nike, Inc.","Nike, Inc.",nike-inc,0000320187,Consumer Discretionary,"Apparel, Accessories & Luxury Goods",NKE,True
+NOC,Northrop Grumman,Northrop Grumman,northrop-grumman,0001133421,Industrials,Aerospace & Defense,NOC,True
+NOW,ServiceNow,ServiceNow,servicenow,0001373715,Information Technology,Systems Software,NOW,True
+NRG,NRG Energy,NRG Energy,nrg-energy,0001013871,Utilities,Independent Power Producers & Energy Traders,NRG,True
+NSC,Norfolk Southern,Norfolk Southern,norfolk-southern,0000702165,Industrials,Rail Transportation,NSC,True
+NTAP,NetApp,NetApp,netapp,0001002047,Information Technology,"Technology Hardware, Storage & Peripherals",NTAP,True
+NTRS,Northern Trust,Northern Trust,northern-trust,0000073124,Financials,Asset Management & Custody Banks,NTRS,True
+NUE,Nucor,Nucor,nucor,0000073309,Materials,Steel,NUE,True
+NVDA,Nvidia,Nvidia,nvidia,0001045810,Information Technology,Semiconductors,NVDA,True
+NVR,"NVR, Inc.","NVR, Inc.",nvr-inc,0000906163,Consumer Discretionary,Homebuilding,NVR,True
+NWS,News Corp (Class B),News Corp,news-corp,0001564708,Communication Services,Publishing,NWSA,False
+NWSA,News Corp (Class A),News Corp,news-corp,0001564708,Communication Services,Publishing,NWSA,True
+NXPI,NXP Semiconductors,NXP Semiconductors,nxp-semiconductors,0001413447,Information Technology,Semiconductors,NXPI,True
+O,Realty Income,Realty Income,realty-income,0000726728,Real Estate,Retail REITs,O,True
+ODFL,Old Dominion,Old Dominion,old-dominion,0000878927,Industrials,Cargo Ground Transportation,ODFL,True
+OKE,Oneok,Oneok,oneok,0001039684,Energy,Oil & Gas Storage & Transportation,OKE,True
+OMC,Omnicom Group,Omnicom Group,omnicom-group,0000029989,Communication Services,Advertising,OMC,True
+ON,ON Semiconductor,ON Semiconductor,on-semiconductor,0001097864,Information Technology,Semiconductors,ON,True
+ORCL,Oracle Corporation,Oracle Corporation,oracle-corporation,0001341439,Information Technology,Application Software,ORCL,True
+ORLY,O’Reilly Automotive,O’Reilly Automotive,o-reilly-automotive,0000898173,Consumer Discretionary,Automotive Retail,ORLY,True
+OTIS,Otis Worldwide,Otis Worldwide,otis-worldwide,0001781335,Industrials,Industrial Machinery & Supplies & Components,OTIS,True
+OXY,Occidental Petroleum,Occidental Petroleum,occidental-petroleum,0000797468,Energy,Oil & Gas Exploration & Production,OXY,True
+PANW,Palo Alto Networks,Palo Alto Networks,palo-alto-networks,0001327567,Information Technology,Systems Software,PANW,True
+PAYX,Paychex,Paychex,paychex,0000723531,Industrials,Human Resource & Employment Services,PAYX,True
+PCAR,Paccar,Paccar,paccar,0000075362,Industrials,Construction Machinery & Heavy Transportation Equipment,PCAR,True
+PCG,PG&E Corporation,PG&E Corporation,pg-e-corporation,0001004980,Utilities,Multi-Utilities,PCG,True
+PEG,Public Service Enterprise Group,Public Service Enterprise Group,public-service-enterprise-group,0000788784,Utilities,Electric Utilities,PEG,True
+PEP,PepsiCo,PepsiCo,pepsico,0000077476,Consumer Staples,Soft Drinks & Non-alcoholic Beverages,PEP,True
+PFE,Pfizer,Pfizer,pfizer,0000078003,Health Care,Pharmaceuticals,PFE,True
+PFG,Principal Financial Group,Principal Financial Group,principal-financial-group,0001126328,Financials,Life & Health Insurance,PFG,True
+PG,Procter & Gamble,Procter & Gamble,procter-gamble,0000080424,Consumer Staples,Personal Care Products,PG,True
+PGR,Progressive Corporation,Progressive Corporation,progressive-corporation,0000080661,Financials,Property & Casualty Insurance,PGR,True
+PH,Parker Hannifin,Parker Hannifin,parker-hannifin,0000076334,Industrials,Industrial Machinery & Supplies & Components,PH,True
+PHM,PulteGroup,PulteGroup,pultegroup,0000822416,Consumer Discretionary,Homebuilding,PHM,True
+PKG,Packaging Corporation of America,Packaging Corporation of America,packaging-corporation-of-america,0000075677,Materials,Paper & Plastic Packaging Products & Materials,PKG,True
+PLD,Prologis,Prologis,prologis,0001045609,Real Estate,Industrial REITs,PLD,True
+PLTR,Palantir Technologies,Palantir Technologies,palantir-technologies,0001321655,Information Technology,Application Software,PLTR,True
+PM,Philip Morris International,Philip Morris International,philip-morris-international,0001413329,Consumer Staples,Tobacco,PM,True
+PNC,PNC Financial Services,PNC Financial Services,pnc-financial-services,0000713676,Financials,Diversified Banks,PNC,True
+PNR,Pentair,Pentair,pentair,0000077360,Industrials,Industrial Machinery & Supplies & Components,PNR,True
+PNW,Pinnacle West Capital,Pinnacle West Capital,pinnacle-west-capital,0000764622,Utilities,Multi-Utilities,PNW,True
+PODD,Insulet Corporation,Insulet Corporation,insulet-corporation,0001145197,Health Care,Health Care Equipment,PODD,True
+PPG,PPG Industries,PPG Industries,ppg-industries,0000079879,Materials,Specialty Chemicals,PPG,True
+PPL,PPL Corporation,PPL Corporation,ppl-corporation,0000922224,Utilities,Electric Utilities,PPL,True
+PRU,Prudential Financial,Prudential Financial,prudential-financial,0001137774,Financials,Life & Health Insurance,PRU,True
+PSA,Public Storage,Public Storage,public-storage,0001393311,Real Estate,Self-Storage REITs,PSA,True
+PSKY,Paramount Skydance Corporation,Paramount Skydance Corporation,paramount-skydance-corporation,0002041610,Communication Services,Movies & Entertainment,PSKY,True
+PSX,Phillips 66,Phillips 66,phillips-66,0001534701,Energy,Oil & Gas Refining & Marketing,PSX,True
+PTC,PTC Inc.,PTC Inc.,ptc-inc,0000857005,Information Technology,Application Software,PTC,True
+PWR,Quanta Services,Quanta Services,quanta-services,0001050915,Industrials,Construction & Engineering,PWR,True
+PYPL,PayPal,PayPal,paypal,0001633917,Financials,Transaction & Payment Processing Services,PYPL,True
+Q,Qnity Electronics,Qnity Electronics,qnity-electronics,0002058873,Information Technology,Semiconductor Materials & Equipment,Q,True
+QCOM,Qualcomm,Qualcomm,qualcomm,0000804328,Information Technology,Semiconductors,QCOM,True
+RCL,Royal Caribbean Group,Royal Caribbean Group,royal-caribbean-group,0000884887,Consumer Discretionary,"Hotels, Resorts & Cruise Lines",RCL,True
+REG,Regency Centers,Regency Centers,regency-centers,0000910606,Real Estate,Retail REITs,REG,True
+REGN,Regeneron Pharmaceuticals,Regeneron Pharmaceuticals,regeneron-pharmaceuticals,0000872589,Health Care,Biotechnology,REGN,True
+RF,Regions Financial Corporation,Regions Financial Corporation,regions-financial-corporation,0001281761,Financials,Regional Banks,RF,True
+RJF,Raymond James Financial,Raymond James Financial,raymond-james-financial,0000720005,Financials,Investment Banking & Brokerage,RJF,True
+RL,Ralph Lauren Corporation,Ralph Lauren Corporation,ralph-lauren-corporation,0001037038,Consumer Discretionary,"Apparel, Accessories & Luxury Goods",RL,True
+RMD,ResMed,ResMed,resmed,0000943819,Health Care,Health Care Equipment,RMD,True
+ROK,Rockwell Automation,Rockwell Automation,rockwell-automation,0001024478,Industrials,Electrical Components & Equipment,ROK,True
+ROL,"Rollins, Inc.","Rollins, Inc.",rollins-inc,0000084839,Industrials,Environmental & Facilities Services,ROL,True
+ROP,Roper Technologies,Roper Technologies,roper-technologies,0000882835,Information Technology,Electronic Equipment & Instruments,ROP,True
+ROST,Ross Stores,Ross Stores,ross-stores,0000745732,Consumer Discretionary,Apparel Retail,ROST,True
+RSG,Republic Services,Republic Services,republic-services,0001060391,Industrials,Environmental & Facilities Services,RSG,True
+RTX,RTX Corporation,RTX Corporation,rtx-corporation,0000101829,Industrials,Aerospace & Defense,RTX,True
+RVTY,Revvity,Revvity,revvity,0000031791,Health Care,Health Care Equipment,RVTY,True
+SBAC,SBA Communications,SBA Communications,sba-communications,0001034054,Real Estate,Telecom Tower REITs,SBAC,True
+SBUX,Starbucks,Starbucks,starbucks,0000829224,Consumer Discretionary,Restaurants,SBUX,True
+SCHW,Charles Schwab Corporation,Charles Schwab Corporation,charles-schwab-corporation,0000316709,Financials,Investment Banking & Brokerage,SCHW,True
+SHW,Sherwin-Williams,Sherwin-Williams,sherwin-williams,0000089800,Materials,Specialty Chemicals,SHW,True
+SJM,J.M. Smucker Company (The),J.M. Smucker Company (The),j-m-smucker-company-the,0000091419,Consumer Staples,Packaged Foods & Meats,SJM,True
+SLB,Schlumberger,Schlumberger,schlumberger,0000087347,Energy,Oil & Gas Equipment & Services,SLB,True
+SMCI,Supermicro,Supermicro,supermicro,0001375365,Information Technology,"Technology Hardware, Storage & Peripherals",SMCI,True
+SNA,Snap-on,Snap-on,snap-on,0000091440,Industrials,Industrial Machinery & Supplies & Components,SNA,True
+SNDK,Sandisk,Sandisk,sandisk,0002023554,Information Technology,"Technology Hardware, Storage & Peripherals",SNDK,True
+SNPS,Synopsys,Synopsys,synopsys,0000883241,Information Technology,Application Software,SNPS,True
+SO,Southern Company,Southern Company,southern-company,0000092122,Utilities,Electric Utilities,SO,True
+SOLV,Solventum,Solventum,solventum,0001964738,Health Care,Health Care Technology,SOLV,True
+SPG,Simon Property Group,Simon Property Group,simon-property-group,0001063761,Real Estate,Retail REITs,SPG,True
+SPGI,S&P Global,S&P Global,s-p-global,0000064040,Financials,Financial Exchanges & Data,SPGI,True
+SRE,Sempra,Sempra,sempra,0001032208,Utilities,Multi-Utilities,SRE,True
+STE,Steris,Steris,steris,0001757898,Health Care,Health Care Equipment,STE,True
+STLD,Steel Dynamics,Steel Dynamics,steel-dynamics,0001022671,Materials,Steel,STLD,True
+STT,State Street Corporation,State Street Corporation,state-street-corporation,0000093751,Financials,Asset Management & Custody Banks,STT,True
+STX,Seagate Technology,Seagate Technology,seagate-technology,0001137789,Information Technology,"Technology Hardware, Storage & Peripherals",STX,True
+STZ,Constellation Brands,Constellation Brands,constellation-brands,0000016918,Consumer Staples,Distillers & Vintners,STZ,True
+SW,Smurfit Westrock,Smurfit Westrock,smurfit-westrock,0002005951,Materials,Paper & Plastic Packaging Products & Materials,SW,True
+SWK,Stanley Black & Decker,Stanley Black & Decker,stanley-black-decker,0000093556,Industrials,Industrial Machinery & Supplies & Components,SWK,True
+SWKS,Skyworks Solutions,Skyworks Solutions,skyworks-solutions,0000004127,Information Technology,Semiconductors,SWKS,True
+SYF,Synchrony Financial,Synchrony Financial,synchrony-financial,0001601712,Financials,Consumer Finance,SYF,True
+SYK,Stryker Corporation,Stryker Corporation,stryker-corporation,0000310764,Health Care,Health Care Equipment,SYK,True
+SYY,Sysco,Sysco,sysco,0000096021,Consumer Staples,Food Distributors,SYY,True
+T,AT&T,AT&T,at-t,0000732717,Communication Services,Integrated Telecommunication Services,T,True
+TAP,Molson Coors Beverage Company,Molson Coors Beverage Company,molson-coors-beverage-company,0000024545,Consumer Staples,Brewers,TAP,True
+TDG,TransDigm Group,TransDigm Group,transdigm-group,0001260221,Industrials,Aerospace & Defense,TDG,True
+TDY,Teledyne Technologies,Teledyne Technologies,teledyne-technologies,0001094285,Information Technology,Electronic Equipment & Instruments,TDY,True
+TECH,Bio-Techne,Bio-Techne,bio-techne,0000842023,Health Care,Life Sciences Tools & Services,TECH,True
+TEL,TE Connectivity,TE Connectivity,te-connectivity,0001385157,Information Technology,Electronic Manufacturing Services,TEL,True
+TER,Teradyne,Teradyne,teradyne,0000097210,Information Technology,Semiconductor Materials & Equipment,TER,True
+TFC,Truist Financial,Truist Financial,truist-financial,0000092230,Financials,Diversified Banks,TFC,True
+TGT,Target Corporation,Target Corporation,target-corporation,0000027419,Consumer Staples,Consumer Staples Merchandise Retail,TGT,True
+TJX,TJX Companies,TJX Companies,tjx-companies,0000109198,Consumer Discretionary,Apparel Retail,TJX,True
+TKO,TKO Group Holdings,TKO Group Holdings,tko-group-holdings,0001973266,Communication Services,Movies & Entertainment,TKO,True
+TMO,Thermo Fisher Scientific,Thermo Fisher Scientific,thermo-fisher-scientific,0000097745,Health Care,Life Sciences Tools & Services,TMO,True
+TMUS,T-Mobile US,T-Mobile US,t-mobile-us,0001283699,Communication Services,Wireless Telecommunication Services,TMUS,True
+TPL,Texas Pacific Land Corporation,Texas Pacific Land Corporation,texas-pacific-land-corporation,0001811074,Energy,Oil & Gas Exploration & Production,TPL,True
+TPR,"Tapestry, Inc.","Tapestry, Inc.",tapestry-inc,0001116132,Consumer Discretionary,"Apparel, Accessories & Luxury Goods",TPR,True
+TRGP,Targa Resources,Targa Resources,targa-resources,0001389170,Energy,Oil & Gas Storage & Transportation,TRGP,True
+TRMB,Trimble Inc.,Trimble Inc.,trimble-inc,0000864749,Information Technology,Application Software,TRMB,True
+TROW,T. Rowe Price,T. Rowe Price,t-rowe-price,0001113169,Financials,Asset Management & Custody Banks,TROW,True
+TRV,Travelers Companies (The),Travelers Companies (The),travelers-companies-the,0000086312,Financials,Property & Casualty Insurance,TRV,True
+TSCO,Tractor Supply,Tractor Supply,tractor-supply,0000916365,Consumer Discretionary,Other Specialty Retail,TSCO,True
+TSLA,"Tesla, Inc.","Tesla, Inc.",tesla-inc,0001318605,Consumer Discretionary,Automobile Manufacturers,TSLA,True
+TSN,Tyson Foods,Tyson Foods,tyson-foods,0000100493,Consumer Staples,Packaged Foods & Meats,TSN,True
+TT,Trane Technologies,Trane Technologies,trane-technologies,0001466258,Industrials,Building Products,TT,True
+TTD,Trade Desk (The),Trade Desk (The),trade-desk-the,0001671933,Communication Services,Advertising,TTD,True
+TTWO,Take-Two Interactive,Take-Two Interactive,take-two-interactive,0000946581,Communication Services,Interactive Home Entertainment,TTWO,True
+TXN,Texas Instruments,Texas Instruments,texas-instruments,0000097476,Information Technology,Semiconductors,TXN,True
+TXT,Textron,Textron,textron,0000217346,Industrials,Aerospace & Defense,TXT,True
+TYL,Tyler Technologies,Tyler Technologies,tyler-technologies,0000860731,Information Technology,Application Software,TYL,True
+UAL,United Airlines Holdings,United Airlines Holdings,united-airlines-holdings,0000100517,Industrials,Passenger Airlines,UAL,True
+UBER,Uber,Uber,uber,0001543151,Industrials,Passenger Ground Transportation,UBER,True
+UDR,"UDR, Inc.","UDR, Inc.",udr-inc,0000074208,Real Estate,Multi-Family Residential REITs,UDR,True
+UHS,Universal Health Services,Universal Health Services,universal-health-services,0000352915,Health Care,Health Care Facilities,UHS,True
+ULTA,Ulta Beauty,Ulta Beauty,ulta-beauty,0001403568,Consumer Discretionary,Other Specialty Retail,ULTA,True
+UNH,UnitedHealth Group,UnitedHealth Group,unitedhealth-group,0000731766,Health Care,Managed Health Care,UNH,True
+UNP,Union Pacific Corporation,Union Pacific Corporation,union-pacific-corporation,0000100885,Industrials,Rail Transportation,UNP,True
+UPS,United Parcel Service,United Parcel Service,united-parcel-service,0001090727,Industrials,Air Freight & Logistics,UPS,True
+URI,United Rentals,United Rentals,united-rentals,0001067701,Industrials,Trading Companies & Distributors,URI,True
+USB,U.S. Bancorp,U.S. Bancorp,u-s-bancorp,0000036104,Financials,Diversified Banks,USB,True
+V,Visa Inc.,Visa Inc.,visa-inc,0001403161,Financials,Transaction & Payment Processing Services,V,True
+VEEV,Veeva Systems,Veeva Systems,veeva-systems,0001393052,Health Care,Health Care Technology,VEEV,True
+VICI,Vici Properties,Vici Properties,vici-properties,0001705696,Real Estate,Hotel & Resort REITs,VICI,True
+VLO,Valero Energy,Valero Energy,valero-energy,0001035002,Energy,Oil & Gas Refining & Marketing,VLO,True
+VLTO,Veralto,Veralto,veralto,0001967680,Industrials,Environmental & Facilities Services,VLTO,True
+VMC,Vulcan Materials Company,Vulcan Materials Company,vulcan-materials-company,0001396009,Materials,Construction Materials,VMC,True
+VRSK,Verisk Analytics,Verisk Analytics,verisk-analytics,0001442145,Industrials,Research & Consulting Services,VRSK,True
+VRSN,Verisign,Verisign,verisign,0001014473,Information Technology,Internet Services & Infrastructure,VRSN,True
+VRT,Vertiv,Vertiv,vertiv,0001674101,Industrials,Electrical Components & Equipment,VRT,True
+VRTX,Vertex Pharmaceuticals,Vertex Pharmaceuticals,vertex-pharmaceuticals,0000875320,Health Care,Biotechnology,VRTX,True
+VST,Vistra Corp.,Vistra Corp.,vistra-corp,0001692819,Utilities,Electric Utilities,VST,True
+VTR,Ventas,Ventas,ventas,0000740260,Real Estate,Health Care REITs,VTR,True
+VTRS,Viatris,Viatris,viatris,0001792044,Health Care,Pharmaceuticals,VTRS,True
+VZ,Verizon,Verizon,verizon,0000732712,Communication Services,Integrated Telecommunication Services,VZ,True
+WAB,Wabtec,Wabtec,wabtec,0000943452,Industrials,Construction Machinery & Heavy Transportation Equipment,WAB,True
+WAT,Waters Corporation,Waters Corporation,waters-corporation,0001000697,Health Care,Life Sciences Tools & Services,WAT,True
+WBD,Warner Bros. Discovery,Warner Bros. Discovery,warner-bros-discovery,0001437107,Communication Services,Broadcasting,WBD,True
+WDAY,"Workday, Inc.","Workday, Inc.",workday-inc,0001327811,Information Technology,Application Software,WDAY,True
+WDC,Western Digital,Western Digital,western-digital,0000106040,Information Technology,"Technology Hardware, Storage & Peripherals",WDC,True
+WEC,WEC Energy Group,WEC Energy Group,wec-energy-group,0000783325,Utilities,Electric Utilities,WEC,True
+WELL,Welltower,Welltower,welltower,0000766704,Real Estate,Health Care REITs,WELL,True
+WFC,Wells Fargo,Wells Fargo,wells-fargo,0000072971,Financials,Diversified Banks,WFC,True
+WM,Waste Management,Waste Management,waste-management,0000823768,Industrials,Environmental & Facilities Services,WM,True
+WMB,Williams Companies,Williams Companies,williams-companies,0000107263,Energy,Oil & Gas Storage & Transportation,WMB,True
+WMT,Walmart,Walmart,walmart,0000104169,Consumer Staples,Consumer Staples Merchandise Retail,WMT,True
+WRB,W. R. Berkley Corporation,W. R. Berkley Corporation,w-r-berkley-corporation,0000011544,Financials,Property & Casualty Insurance,WRB,True
+WSM,"Williams-Sonoma, Inc.","Williams-Sonoma, Inc.",williams-sonoma-inc,0000719955,Consumer Discretionary,Homefurnishing Retail,WSM,True
+WST,West Pharmaceutical Services,West Pharmaceutical Services,west-pharmaceutical-services,0000105770,Health Care,Health Care Supplies,WST,True
+WTW,Willis Towers Watson,Willis Towers Watson,willis-towers-watson,0001140536,Financials,Insurance Brokers,WTW,True
+WY,Weyerhaeuser,Weyerhaeuser,weyerhaeuser,0000106535,Real Estate,Timber REITs,WY,True
+WYNN,Wynn Resorts,Wynn Resorts,wynn-resorts,0001174922,Consumer Discretionary,Casinos & Gaming,WYNN,True
+XEL,Xcel Energy,Xcel Energy,xcel-energy,0000072903,Utilities,Multi-Utilities,XEL,True
+XOM,ExxonMobil,ExxonMobil,exxonmobil,0000034088,Energy,Integrated Oil & Gas,XOM,True
+XYL,Xylem Inc.,Xylem Inc.,xylem-inc,0001524472,Industrials,Industrial Machinery & Supplies & Components,XYL,True
+XYZ,"Block, Inc.","Block, Inc.",block-inc,0001512673,Financials,Transaction & Payment Processing Services,XYZ,True
+YUM,Yum! Brands,Yum! Brands,yum-brands,0001041061,Consumer Discretionary,Restaurants,YUM,True
+ZBH,Zimmer Biomet,Zimmer Biomet,zimmer-biomet,0001136869,Health Care,Health Care Equipment,ZBH,True
+ZBRA,Zebra Technologies,Zebra Technologies,zebra-technologies,0000877212,Information Technology,Electronic Equipment & Instruments,ZBRA,True
+ZTS,Zoetis,Zoetis,zoetis,0001555280,Health Care,Pharmaceuticals,ZTS,True

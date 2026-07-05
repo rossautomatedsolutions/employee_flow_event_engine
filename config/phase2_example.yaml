@@ -1,0 +1,32 @@
+# Phase 2 bounded batch example.
+# This run uses the current S&P 500 universe snapshot but keeps a 5-company
+# offline development subset so the pipeline remains deterministic.
+benchmark: SPY
+universe_file: "config/sp500_universe_2026-07-04.csv"
+ticker_subset:
+  - AAPL
+  - AMZN
+  - CRM
+  - MSFT
+  - NVDA
+start_date: "2024-06-28"
+end_date: "2025-01-03"
+output_dir: "artifacts/phase2_example"
+cache_dir: "artifacts/phase2_cache"
+resume_mode: true
+offline_mode: true
+max_companies: 5
+
+price_source: csv
+price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
+
+filings:
+  fixture_dir: "fixtures/sec_filings"
+
+reviews:
+  review_file: "config/espp_date_reviews.csv"
+
+event_study:
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5

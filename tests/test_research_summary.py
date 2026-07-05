@@ -1,6 +1,7 @@
 import pandas as pd
 
 from src.analysis.research_summary import WARNING_BANNER, build_research_summary
+from src.analysis.phase2_summary import build_phase2_summary
 
 
 def test_build_research_summary_counts_review_status_and_window_coverage() -> None:
@@ -75,3 +76,52 @@ def test_research_summary_markdown_includes_descriptive_only_warning() -> None:
     assert "not statistically meaningful" in report.markdown.lower()
     assert "not a trading signal" in report.markdown.lower()
     assert "insufficient for inference" in report.markdown.lower()
+
+
+def test_phase2_summary_counts_event_windows_by_ticker_and_event_id() -> None:
+    universe = pd.DataFrame(
+        [
+            {"ticker": "AAPL", "issuer_id": "apple-inc"},
+            {"ticker": "CRM", "issuer_id": "salesforce"},
+        ]
+    )
+    statuses = pd.DataFrame(
+        [
+            {
+                "ticker": "AAPL",
+                "sector": "Information Technology",
+                "processing_status": "completed",
+                "espp_mentions_found": 1,
+                "candidate_events_found": 2,
+                "accepted_events": 0,
+                "corrected_events": 0,
+                "rejected_events": 0,
+                "usable_event_windows": 2,
+                "warning_count": 0,
+            },
+            {
+                "ticker": "CRM",
+                "sector": "Information Technology",
+                "processing_status": "completed",
+                "espp_mentions_found": 1,
+                "candidate_events_found": 2,
+                "accepted_events": 0,
+                "corrected_events": 0,
+                "rejected_events": 0,
+                "usable_event_windows": 2,
+                "warning_count": 0,
+            },
+        ]
+    )
+    panel = pd.DataFrame(
+        [
+            {"ticker": "AAPL", "event_id": 1, "event_date": "2024-06-30", "tau": 0},
+            {"ticker": "AAPL", "event_id": 2, "event_date": "2024-12-31", "tau": 0},
+            {"ticker": "CRM", "event_id": 1, "event_date": "2024-06-30", "tau": 0},
+            {"ticker": "CRM", "event_id": 2, "event_date": "2024-12-31", "tau": 0},
+        ]
+    )
+
+    summary = build_phase2_summary(universe, statuses, pd.DataFrame(), panel).summary
+
+    assert summary["event_windows_generated"] == 4

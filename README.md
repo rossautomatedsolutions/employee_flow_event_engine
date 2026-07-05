@@ -1,6 +1,11 @@
 # employee_flow_event_engine
 
-`employee_flow_event_engine` is a modular Python Research v0.1 project for analyzing whether Employee Stock Purchase Plan (ESPP) purchase dates are associated with statistically significant price behavior.
+`employee_flow_event_engine` is a modular Python research project for analyzing whether Employee Stock Purchase Plan (ESPP) purchase dates are associated with statistically significant price behavior.
+
+The repository now has two explicit tracks:
+
+- Phase 1: a tested offline fixture workflow for deterministic ESPP event extraction, review, audit, and event-study replay.
+- Phase 2: an initial batch-processing scaffold for scalable, auditable research-dataset construction over a dated current S&P 500 universe snapshot.
 
 ## What it does
 
@@ -17,19 +22,30 @@
 
 ```text
 src/
+  analysis/
+    event_study.py
+    metrics.py
+    phase2_summary.py
+    research_summary.py
+    strategy.py
   data/
     price_loader.py
     sec_parser.py
   events/
     espp_event_extractor.py
-  analysis/
-    event_study.py
-    metrics.py
   pipeline/
+    batch_config.py
+    company_status.py
+    run_batch.py
     run_event_study.py
+  universe/
+    sp500_universe.py
 config/
   example.yaml
+  phase2_example.yaml
+  sp500_universe_2026-07-04.csv
 fixtures/
+  prices/
   sec_filings/
 tests/
 README.md
@@ -41,6 +57,11 @@ README.md
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+```
+
+### Phase 1 offline replay
+
+```bash
 python -m src.pipeline.run_event_study --config config/example.yaml
 ```
 
@@ -52,19 +73,33 @@ The example run is fully local/reproducible today:
 
 That means the current example config is suitable for fully offline Research v0.1 replay. The legacy live path still exists if you explicitly switch `price_source` back to `yfinance`.
 
+### Phase 2 bounded batch example
+
+```bash
+python -m src.pipeline.run_batch --config config/phase2_example.yaml --force
+```
+
+That example intentionally stays bounded and deterministic:
+
+- it uses the dated current-universe snapshot in [`config/sp500_universe_2026-07-04.csv`](config/sp500_universe_2026-07-04.csv)
+- it filters to a 5-company development subset
+- it uses local filing fixtures and a local CSV price fixture
+- it writes universe validation, per-company status, consolidated audit, and Phase 2 summary artifacts
+- it supports resumable execution through `resume_mode` and `--force`
+
 Research v0.1 includes two offline replay configs:
 
-- [`config/example.yaml`](C:/GitHub/employee_flow_event_engine/config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
-- [`config/offline_business_day_example.yaml`](C:/GitHub/employee_flow_event_engine/config/offline_business_day_example.yaml) is the slightly more market-calendar-realistic offline replay and uses business-day-only price rows plus manual review corrections that move non-business assigned dates onto business-day `effective_event_date` values. It also uses explicit manual review rejections to exclude irrelevant fallback anchors so the smoke-run audit stays focused on the tiny fixture window.
+- [`config/example.yaml`](config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
+- [`config/offline_business_day_example.yaml`](config/offline_business_day_example.yaml) is the slightly more market-calendar-realistic offline replay and uses business-day-only price rows plus manual review corrections that move non-business assigned dates onto business-day `effective_event_date` values. It also uses explicit manual review rejections to exclude irrelevant fallback anchors so the smoke-run audit stays focused on the tiny fixture window.
 
 Both configs remain research fixtures for offline replay and decision support. They are not production ESPP date validation.
 
 Example config includes:
 
 - `price_source: csv`
-- `price_data_path` pointing at a local research price fixture under [`fixtures/prices`](C:/GitHub_Review_Folder/employee_flow_event_engine/fixtures/prices)
+- `price_data_path` pointing at a local research price fixture under [`fixtures/prices`](fixtures/prices)
 - ticker metadata (market cap + employees) for cross-sectional grouping
-- a local `filings.fixture_dir` pointing at repo fixtures under [`fixtures/sec_filings`](C:/GitHub_Review_Folder/employee_flow_event_engine/fixtures/sec_filings)
+- a local `filings.fixture_dir` pointing at repo fixtures under [`fixtures/sec_filings`](fixtures/sec_filings)
 - an optional `reviews.review_file` pointing at a local ESPP date review CSV
 
 ## Price fixture format
@@ -112,7 +147,7 @@ If no local fixture is found for a ticker, the pipeline falls back to `_mock_fil
 
 ## Review File Format
 
-The pipeline can also apply an optional manual review layer from a local CSV file such as [`config/espp_date_reviews.csv`](C:/GitHub_Review_Folder/employee_flow_event_engine/config/espp_date_reviews.csv).
+The pipeline can also apply an optional manual review layer from a local CSV file such as [`config/espp_date_reviews.csv`](config/espp_date_reviews.csv).
 
 Required columns:
 
@@ -140,7 +175,41 @@ CRM|10-K|2024-03-01|crm_2024_10k_fixture|01-01|2025-01-01|filing_text_month_day,
 NVDA|na|na|default_anchor_nvda_2025_1231|12-31|2025-12-31|fallback_default_anchors,NVDA,2025-12-31,,rejected,Heuristic date not supported by manual review
 ```
 
-## Outputs
+## Phase 2 outputs
+
+Under the configured Phase 2 output directory:
+
+- `selected_universe.csv`
+- `company_processing_status.csv`
+- `espp_date_audit.csv`
+- `all_event_windows.csv` when usable windows exist
+- `phase2_summary_metrics.csv`
+- `phase2_sector_counts.csv`
+- `reports/universe_validation_report.md`
+- `reports/phase2_research_summary.md`
+
+`company_processing_status.csv` includes per-company batch state such as:
+
+- `ticker`
+- `company_name`
+- `cik`
+- `sector`
+- `processing_status`
+- `filings_discovered`
+- `filings_processed`
+- `espp_mentions_found`
+- `candidate_events_found`
+- `accepted_events`
+- `corrected_events`
+- `rejected_events`
+- `usable_event_windows`
+- `warning_count`
+- `error_message`
+- `processing_timestamp`
+
+Secondary share classes in legitimate duplicate-CIK groups are marked as `skipped` so filing research is not duplicated across multiple listed share classes.
+
+## Phase 1 outputs
 
 Under `artifacts/` (or configured output dir):
 
@@ -191,6 +260,36 @@ That report is intentionally narrow:
 
 The summary does not make production ESPP accuracy claims, alpha claims, or trading claims. It is only there to help decide whether the reviewed offline ESPP dataset has enough usable evidence to justify a deeper next research pass.
 
+## Phase 2 universe handling
+
+Phase 2 introduces a versioned S&P 500 universe loader and validator.
+
+The universe file includes:
+
+- `ticker`
+- `company_name`
+- `issuer_name`
+- `issuer_id`
+- `cik`
+- `gics_sector`
+- `gics_sub_industry`
+- `primary_ticker`
+- `is_primary_share_class`
+
+Validation checks:
+
+- required columns
+- ticker normalization
+- CIK normalization
+- duplicate ticker detection
+- duplicate CIK detection
+- legitimate multi-share-class group handling
+- primary-share-class consistency
+
+The loader writes a Markdown validation report so duplicate-company cases remain explicit and auditable.
+
+Source notes for the current dated snapshot live in [`config/sp500_universe_2026-07-04.source.md`](config/sp500_universe_2026-07-04.source.md).
+
 ## Determinism and reproducibility notes
 
 - CSV outputs are generated with stable ordering and fixed float formatting where applicable.
@@ -200,6 +299,14 @@ The summary does not make production ESPP accuracy claims, alpha claims, or trad
 - Event date construction follows deterministic precedence rules and writes an audit CSV for review.
 - Manual review decisions are applied deterministically from a local CSV when configured.
 - Review matching prefers deterministic `event_review_id` keys and falls back to `ticker + original_assigned_event_date` for older review rows.
+- Phase 2 batch selection, status outputs, and summary outputs are also config-driven and deterministic in offline mode.
+
+## Phase 2 limitations
+
+- The current Phase 2 universe uses current S&P 500 membership rather than historical point-in-time membership.
+- That introduces survivorship bias and index-selection bias into downstream research outputs.
+- The current Phase 2 batch scaffold is for research infrastructure and dataset construction, not predictive modeling or a trading signal.
+- Live SEC acquisition is not implemented in the Phase 2 batch path yet; offline deterministic fixtures remain the supported bounded increment.
 
 ## Current date-identification limitations
 
