@@ -11,6 +11,7 @@ The repository now has two explicit tracks:
 
 - Loads historical OHLCV data from either local CSV fixtures or the legacy `yfinance` provider.
 - Loads local filing fixtures (YAML) for reproducible ESPP text inputs.
+- Can acquire bounded live SEC / EDGAR submissions and filing documents keyed by issuer CIK.
 - Parses filing text (10-K / DEF 14A style documents) for ESPP clues.
 - Generates approximate ESPP event dates with audit metadata.
 - Runs event studies over configurable windows (default `t-10` to `t+10`).
@@ -31,6 +32,8 @@ src/
   data/
     price_loader.py
     sec_parser.py
+  sec/
+    edgar.py
   events/
     espp_event_extractor.py
   pipeline/
@@ -87,6 +90,25 @@ That example intentionally stays bounded and deterministic:
 - it writes universe validation, per-company status, consolidated audit, and Phase 2 summary artifacts
 - it supports resumable execution through `resume_mode` and `--force`
 
+### Phase 2B live SEC / EDGAR pilot
+
+```bash
+python -m src.pipeline.run_batch --config config/phase2_live_sec_pilot.yaml --force
+```
+
+Before running that command, provide a valid SEC user agent either by setting
+`filings.sec_user_agent` in a local config override or by exporting
+`SEC_EDGAR_USER_AGENT`.
+
+The Phase 2B pilot also stays intentionally bounded:
+
+- it keeps the same five-company subset used by the offline Phase 2A sample
+- it uses live SEC submissions and filing documents keyed by CIK
+- it uses a configurable SEC-compliant user agent and sequential throttled requests
+- it writes durable raw metadata and filing-document cache files under the configured `cache_dir`
+- it writes filing inventory, filing-level ESPP screening, and SEC acquisition metrics artifacts
+- it supports cache-only reruns through [`config/phase2_live_sec_pilot_cache_only.yaml`](config/phase2_live_sec_pilot_cache_only.yaml)
+
 Research v0.1 includes two offline replay configs:
 
 - [`config/example.yaml`](config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
@@ -126,9 +148,16 @@ SPY,2024-06-30,302,303,301,302,1500000
 
 If `price_source: csv` is selected, the offline path does not import or call `yfinance`.
 
-## Filing fixture format
+## Filing input modes
 
-The pipeline does not fetch live SEC / EDGAR filings yet. Instead it reads local YAML fixtures so date-identification runs are reproducible and auditable at the filing-text layer.
+Phase 2 batch runs support two bounded filing-input modes:
+
+- `filings.source: fixture` for deterministic local YAML replay
+- `filings.source: sec` for bounded live SEC / EDGAR acquisition with durable caching
+
+### Filing fixture format
+
+The fixture mode reads local YAML inputs so date-identification runs are reproducible and auditable at the filing-text layer.
 
 Each fixture contains:
 
@@ -143,7 +172,31 @@ text: |
 ```
 
 If `filings.fixture_dir` is configured and a ticker fixture is present, the pipeline uses that local text.
-If no local fixture is found for a ticker, the pipeline falls back to `_mock_filings(...)`. Those rows are intentionally labeled as mock-derived in `source_id`, `derivation_rule`, and event metadata so they do not masquerade as fixture or SEC evidence. This fallback is for research continuity only and is not a production filing source.
+If no local fixture is found for a ticker, the Phase 1 pipeline falls back to `_mock_filings(...)`. Those rows are intentionally labeled as mock-derived in `source_id`, `derivation_rule`, and event metadata so they do not masquerade as fixture or SEC evidence. This fallback is for research continuity only and is not a production filing source.
+
+### Live SEC pilot configuration
+
+The live pilot configuration adds:
+
+- `filings.sec_user_agent`
+- `filings.forms`
+- `filings.max_filings_per_issuer`
+- `filings.cache_only`
+- `filings.request_delay_seconds`
+- `filings.max_retries`
+- `filings.timeout_seconds`
+
+The committed live pilot configs intentionally omit a concrete
+`filings.sec_user_agent` value so personal contact details are not stored in
+the repository.
+
+The SEC cache layout is:
+
+- `<cache_dir>/submissions/CIK##########.json`
+- `<cache_dir>/submissions/CIK##########-submissions-###.json` when historical submissions files are needed
+- `<cache_dir>/filings/<cik>/<accession_without_dashes>/index.json`
+- `<cache_dir>/filings/<cik>/<accession_without_dashes>/metadata.json`
+- `<cache_dir>/filings/<cik>/<accession_without_dashes>/<primary_document>`
 
 ## Review File Format
 
@@ -181,6 +234,9 @@ Under the configured Phase 2 output directory:
 
 - `selected_universe.csv`
 - `company_processing_status.csv`
+- `filing_inventory.csv`
+- `filing_screening_results.csv`
+- `sec_acquisition_metrics.csv`
 - `espp_date_audit.csv`
 - `all_event_windows.csv` when usable windows exist
 - `phase2_summary_metrics.csv`
@@ -296,6 +352,7 @@ Source notes for the current dated snapshot live in [`config/sp500_universe_2026
 - Pipeline behavior is controlled by explicit config values.
 - Price inputs can come from a deterministic local CSV when `price_source: csv` is configured.
 - Filing inputs come from local YAML fixtures when configured.
+- Live SEC filing inputs can be replayed from the raw cache when `filings.cache_only: true` is configured.
 - Event date construction follows deterministic precedence rules and writes an audit CSV for review.
 - Manual review decisions are applied deterministically from a local CSV when configured.
 - Review matching prefers deterministic `event_review_id` keys and falls back to `ticker + original_assigned_event_date` for older review rows.
@@ -306,7 +363,9 @@ Source notes for the current dated snapshot live in [`config/sp500_universe_2026
 - The current Phase 2 universe uses current S&P 500 membership rather than historical point-in-time membership.
 - That introduces survivorship bias and index-selection bias into downstream research outputs.
 - The current Phase 2 batch scaffold is for research infrastructure and dataset construction, not predictive modeling or a trading signal.
-- Live SEC acquisition is not implemented in the Phase 2 batch path yet; offline deterministic fixtures remain the supported bounded increment.
+- The live SEC path is a bounded five-company pilot only. It is not a full S&P 500 run.
+- SEC requests are intentionally sequential and throttled; the repo does not issue parallel EDGAR requests.
+- Filing-level ESPP screening is heuristic and auditable, but it does not automatically accept an inferred event as ground truth.
 
 ## Current date-identification limitations
 
@@ -316,14 +375,14 @@ Source notes for the current dated snapshot live in [`config/sp500_universe_2026
 - If a year has no explicit month/day candidates, the pipeline falls back to default semiannual anchors (`06-30`, `12-31`).
 - The audit artifact improves traceability, but it does not validate whether an inferred date is the true ESPP purchase date.
 - Manual review can override or reject heuristic dates, but the process is still local research curation rather than production-grade event mastering.
-- Local fixtures are research inputs, not canonical SEC records, and no live EDGAR retrieval or accession-level provenance is included yet.
+- Local fixtures are research inputs, not canonical SEC records.
 - The offline CSV price fixture is only a small research replay sample; it is not a complete market-history source.
 - The legacy `yfinance` path remains available for exploratory use, but it is not part of the fully offline replay path.
 
 ## TODOs (ESPP date accuracy)
 
 1. Replace keyword/date heuristics with parser logic that captures plan-specific date fields from full filing sections.
-2. Add SEC EDGAR retrieval adapter with filing metadata tracking (`accession`, `filing_url`, `accepted_datetime`).
+2. Expand the SEC EDGAR adapter with richer filing metadata (`accepted_datetime`, exhibit inventory, submission text fallback).
 3. Cross-reference extracted candidate dates with company fiscal calendars to reduce false positives.
 4. Introduce confidence calibration and event-quality filters before running event studies.
 5. Expand the local human-review override workflow beyond the current CSV-based review file when research needs more nuanced curation.

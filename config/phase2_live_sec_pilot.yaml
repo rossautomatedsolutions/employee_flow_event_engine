@@ -1,0 +1,44 @@
+# Phase 2B bounded live SEC/EDGAR acquisition pilot.
+# This keeps the same 5-company development subset as the deterministic
+# Phase 2A sample, but replaces local filing fixtures with live SEC retrieval.
+# Price inputs remain local so the pilot isolates filing acquisition changes.
+benchmark: SPY
+universe_file: "config/sp500_universe_2026-07-04.csv"
+ticker_subset:
+  - AAPL
+  - AMZN
+  - CRM
+  - MSFT
+  - NVDA
+start_date: "2024-06-28"
+end_date: "2025-01-03"
+output_dir: "artifacts/phase2_live_sec_pilot"
+cache_dir: "artifacts/phase2_live_sec_cache"
+resume_mode: true
+offline_mode: false
+max_companies: 5
+
+price_source: csv
+price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
+
+filings:
+  source: sec
+  # Set filings.sec_user_agent in a local config override or export
+  # SEC_EDGAR_USER_AGENT before running the live pilot.
+  forms:
+    - 10-K
+    - 10-K/A
+    - DEF 14A
+  max_filings_per_issuer: 6
+  cache_only: false
+  request_delay_seconds: 0.2
+  max_retries: 3
+  timeout_seconds: 30
+
+reviews:
+  review_file: "config/espp_date_reviews.csv"
+
+event_study:
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5

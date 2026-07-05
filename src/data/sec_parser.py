@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Iterable
@@ -32,6 +32,8 @@ class FilingDocument:
     source_fixture_path: str | None = None
     source_id: str | None = None
     source_kind: str = "fixture"
+    source_url: str | None = None
+    source_cache_path: str | None = None
 
 
 @dataclass(slots=True)
@@ -45,6 +47,7 @@ class ESPPFilingHint:
     source_fixture_path: str | None = None
     source_id: str | None = None
     source_kind: str = "fixture"
+    matched_terms: list[str] = field(default_factory=list)
 
 
 def _coerce_date(value: object, field: str) -> date:
@@ -127,9 +130,11 @@ def extract_espp_hints(document: FilingDocument) -> ESPPFilingHint:
     confidence = min(1.0, 0.2 * hit_count)
 
     snippets: list[str] = []
+    matched_terms: list[str] = []
     for term in ESPP_KEYWORDS:
-        match = re.search(rf"(.{{0,80}}{re.escape(term)}.{{0,80}})", lowered, flags=re.IGNORECASE)
+        match = re.search(rf"(.{{0,80}}{re.escape(term)}.{{0,80}})", document.text, flags=re.IGNORECASE)
         if match:
+            matched_terms.append(term)
             snippets.append(match.group(1).strip())
 
     month_day_candidates: list[tuple[int, int]] = []
@@ -139,7 +144,7 @@ def extract_espp_hints(document: FilingDocument) -> ESPPFilingHint:
         if 1 <= d <= 31:
             month_day_candidates.append((m, d))
 
-    deduped = sorted(set(month_day_candidates))
+    deduped = sorted(set(month_day_candidates)) if matched_terms else []
     return ESPPFilingHint(
         ticker=document.ticker,
         filing_type=document.filing_type,
@@ -150,6 +155,7 @@ def extract_espp_hints(document: FilingDocument) -> ESPPFilingHint:
         source_fixture_path=document.source_fixture_path,
         source_id=document.source_id,
         source_kind=document.source_kind,
+        matched_terms=matched_terms,
     )
 
 

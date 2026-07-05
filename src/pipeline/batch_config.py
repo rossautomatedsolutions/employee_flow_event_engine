@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import os
 from pathlib import Path
 
 import yaml
 
 from src.analysis.event_study import EventStudyConfig
+from src.sec.edgar import DEFAULT_SEC_FORMS, SECFilingSourceConfig
 
 
 @dataclass(slots=True)
@@ -24,6 +26,7 @@ class BatchRunConfig:
     max_companies: int | None
     price_source: str
     price_data_path: Path | None
+    filings: SECFilingSourceConfig
     filing_fixture_dir: Path | None
     review_file: Path | None
     event_study: EventStudyConfig
@@ -47,10 +50,31 @@ def _as_string_list(raw: object, field: str) -> list[str] | None:
     return values or None
 
 
+def _as_string_tuple(raw: object, field: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    values = _as_string_list(raw, field)
+    if values is None:
+        return default
+    return tuple(values)
+
+
 def load_batch_config(config_path: Path) -> BatchRunConfig:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 
     event_cfg = raw.get("event_study", {})
+    filings_cfg = raw.get("filings", {})
+    sec_user_agent = str(filings_cfg.get("sec_user_agent") or os.environ.get("SEC_EDGAR_USER_AGENT", "")).strip() or None
+    filing_source = str(filings_cfg.get("source", "fixture")).strip().lower()
+    filings = SECFilingSourceConfig(
+        source=filing_source,
+        fixture_dir=Path(filings_cfg["fixture_dir"]) if filings_cfg.get("fixture_dir") else None,
+        sec_user_agent=sec_user_agent,
+        forms=_as_string_tuple(filings_cfg.get("forms"), "filings.forms", DEFAULT_SEC_FORMS),
+        max_filings_per_issuer=int(filings_cfg.get("max_filings_per_issuer", 6)),
+        cache_only=bool(filings_cfg.get("cache_only", False)),
+        request_delay_seconds=float(filings_cfg.get("request_delay_seconds", 0.2)),
+        max_retries=int(filings_cfg.get("max_retries", 3)),
+        timeout_seconds=float(filings_cfg.get("timeout_seconds", 30.0)),
+    )
     config = BatchRunConfig(
         benchmark=str(raw["benchmark"]).strip(),
         universe_file=Path(raw["universe_file"]),
@@ -65,7 +89,8 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         max_companies=int(raw["max_companies"]) if raw.get("max_companies") is not None else None,
         price_source=str(raw.get("price_source", "yfinance")).strip(),
         price_data_path=Path(raw["price_data_path"]) if raw.get("price_data_path") else None,
-        filing_fixture_dir=Path(raw["filings"]["fixture_dir"]) if raw.get("filings", {}).get("fixture_dir") else None,
+        filings=filings,
+        filing_fixture_dir=filings.fixture_dir,
         review_file=Path(raw["reviews"]["review_file"]) if raw.get("reviews", {}).get("review_file") else None,
         event_study=EventStudyConfig(
             window_before=int(event_cfg.get("window_before", 10)),
@@ -80,4 +105,19 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         raise ValueError("max_companies must be positive when provided")
     if config.offline_mode and config.price_source.strip().lower() != "csv":
         raise ValueError("offline_mode requires price_source: csv for deterministic runs")
+    if config.filings.source not in {"fixture", "sec"}:
+        raise ValueError("filings.source must be either 'fixture' or 'sec'")
+    if config.filings.source == "fixture" and config.filing_fixture_dir is None:
+        raise ValueError("filings.fixture_dir is required when filings.source is 'fixture'")
+    if config.filings.max_filings_per_issuer <= 0:
+        raise ValueError("filings.max_filings_per_issuer must be positive")
+    if config.filings.max_retries < 0:
+        raise ValueError("filings.max_retries must be zero or positive")
+    if config.filings.timeout_seconds <= 0:
+        raise ValueError("filings.timeout_seconds must be positive")
+    if config.filings.source == "sec":
+        if not config.filings.sec_user_agent:
+            raise ValueError("filings.sec_user_agent or SEC_EDGAR_USER_AGENT is required when filings.source is 'sec'")
+        if not config.filings.cache_only and config.filings.request_delay_seconds < 0.1:
+            raise ValueError("filings.request_delay_seconds must be at least 0.1 seconds for live SEC requests")
     return config

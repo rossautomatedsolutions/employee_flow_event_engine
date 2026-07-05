@@ -158,7 +158,7 @@ def _write_config(
     review_path: Path | None,
     output_dir: Path,
     resume_mode: bool = False,
-) -> Path:
+    ) -> Path:
     config_path = tmp_path / "phase2.yaml"
     review_line = f'  review_file: "{review_path.as_posix()}"' if review_path else "  review_file: null"
     config_path.write_text(
@@ -192,6 +192,109 @@ def _write_config(
     return config_path
 
 
+def _write_sec_config(
+    tmp_path: Path,
+    universe_path: Path,
+    price_path: Path,
+    output_dir: Path,
+    include_user_agent: bool = True,
+) -> Path:
+    config_path = tmp_path / "phase2_live_sec.yaml"
+    sec_user_agent_lines = ['  sec_user_agent: "Test Company test@example.com"'] if include_user_agent else []
+    config_path.write_text(
+        "\n".join(
+            [
+                'benchmark: "SPY"',
+                f'universe_file: "{universe_path.as_posix()}"',
+                'ticker_subset: ["AAPL"]',
+                'start_date: "2024-06-28"',
+                'end_date: "2025-01-01"',
+                f'output_dir: "{output_dir.as_posix()}"',
+                f'cache_dir: "{(tmp_path / "cache").as_posix()}"',
+                "resume_mode: false",
+                "offline_mode: false",
+                "max_companies: 1",
+                'price_source: "csv"',
+                f'price_data_path: "{price_path.as_posix()}"',
+                "filings:",
+                '  source: "sec"',
+                *sec_user_agent_lines,
+                "  forms:",
+                '    - "10-K"',
+                '    - "DEF 14A"',
+                "  max_filings_per_issuer: 2",
+                "  cache_only: false",
+                "  request_delay_seconds: 0.2",
+                "  max_retries: 2",
+                "  timeout_seconds: 5",
+                "reviews:",
+                "  review_file: null",
+                "event_study:",
+                "  window_before: 0",
+                "  window_after: 1",
+                "  volume_lookback: 5",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: str) -> None:
+        self._body = body.encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+def _sec_fake_routes() -> dict[str, str]:
+    submissions_url = "https://data.sec.gov/submissions/CIK0000320193.json"
+    base_url = "https://www.sec.gov/Archives/edgar/data/320193"
+    accession_10k = "0000320193-24-000069"
+    accession_proxy = "0000320193-24-000055"
+    index_10k = f"{base_url}/{accession_10k.replace('-', '')}/index.json"
+    doc_10k = f"{base_url}/{accession_10k.replace('-', '')}/aapl-20240928x10k.htm"
+    index_proxy = f"{base_url}/{accession_proxy.replace('-', '')}/index.json"
+    doc_proxy = f"{base_url}/{accession_proxy.replace('-', '')}/def14a2024.htm"
+    return {
+        submissions_url: "\n".join(
+            [
+                "{",
+                '  "cik": "0000320193",',
+                '  "filings": {"recent": {',
+                '    "accessionNumber": ["0000320193-24-000069", "0000320193-24-000055"],',
+                '    "filingDate": ["2024-11-01", "2024-01-26"],',
+                '    "form": ["10-K", "DEF 14A"],',
+                '    "primaryDocument": ["aapl-20240928x10k.htm", "def14a2024.htm"],',
+                '    "primaryDocDescription": ["10-K", "DEF 14A"]',
+                '  }, "files": []}',
+                "}",
+            ]
+        ),
+        index_10k: '{"directory": {"item": [{"name": "aapl-20240928x10k.htm"}]}}',
+        doc_10k: "<html><body>Employee Stock Purchase Plan purchase dates occur on June 30 and December 31.</body></html>",
+        index_proxy: '{"directory": {"item": [{"name": "def14a2024.htm"}]}}',
+        doc_proxy: "<html><body>The employee stock purchase plan has an offering period with a January 1 purchase date.</body></html>",
+    }
+
+
+def _fake_sec_opener(routes: dict[str, str]):
+    def _opener(request, timeout=None):
+        url = request.full_url
+        if url not in routes:
+            raise AssertionError(f"Unexpected SEC URL requested: {url}")
+        return _FakeHTTPResponse(routes[url])
+
+    return _opener
+
+
 def test_load_batch_config_parses_paths_and_subsets(tmp_path: Path) -> None:
     config_path = _write_config(
         tmp_path=tmp_path,
@@ -210,6 +313,23 @@ def test_load_batch_config_parses_paths_and_subsets(tmp_path: Path) -> None:
     assert config.max_companies == 3
     assert config.ticker_subset == ["AAPL", "CRM", "CRMA"]
     assert config.sector_subset == ["Information Technology"]
+    assert config.filings.source == "fixture"
+
+
+def test_load_batch_config_accepts_sec_user_agent_from_environment(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_sec_config(
+        tmp_path=tmp_path,
+        universe_path=tmp_path / "universe.csv",
+        price_path=tmp_path / "prices.csv",
+        output_dir=tmp_path / "artifacts",
+        include_user_agent=False,
+    )
+    monkeypatch.setenv("SEC_EDGAR_USER_AGENT", "Env Test env@example.com")
+
+    config = load_batch_config(config_path)
+
+    assert config.filings.source == "sec"
+    assert config.filings.sec_user_agent == "Env Test env@example.com"
 
 
 def test_run_phase2_batch_writes_status_summary_and_skips_secondary_share_class(tmp_path: Path) -> None:
@@ -420,3 +540,42 @@ def test_run_phase2_batch_resume_mode_reprocesses_failed_only(tmp_path: Path, mo
     assert calls == ["CRM"]
     assert status.loc[status["ticker"] == "AAPL", "processing_status"].iloc[0] == "completed"
     assert status.loc[status["ticker"] == "CRM", "processing_status"].iloc[0] == "completed"
+
+
+def test_run_phase2_batch_live_sec_mode_writes_sec_artifacts(tmp_path: Path, monkeypatch) -> None:
+    price_path = _write_price_file(tmp_path, include_crm=False)
+    universe_path = _write_universe_file(tmp_path)
+    output_dir = tmp_path / "artifacts"
+    config_path = _write_sec_config(tmp_path, universe_path, price_path, output_dir)
+
+    import src.sec.edgar as sec_edgar
+
+    monkeypatch.setattr(
+        sec_edgar,
+        "build_sec_http_client",
+        lambda config: sec_edgar.SecHttpClient(
+            user_agent=str(config.sec_user_agent),
+            request_delay_seconds=float(config.request_delay_seconds),
+            max_retries=int(config.max_retries),
+            timeout_seconds=float(config.timeout_seconds),
+            opener=_fake_sec_opener(_sec_fake_routes()),
+            sleep_func=lambda seconds: None,
+            clock=lambda: 1.0,
+        ),
+    )
+
+    run_phase2_batch(config_path)
+
+    status = pd.read_csv(output_dir / STATUS_FILE_NAME)
+    inventory = pd.read_csv(output_dir / "filing_inventory.csv")
+    screening = pd.read_csv(output_dir / "filing_screening_results.csv")
+    metrics = pd.read_csv(output_dir / "sec_acquisition_metrics.csv")
+
+    assert status["ticker"].tolist() == ["AAPL"]
+    assert status.loc[0, "processing_status"] == "completed"
+    assert status.loc[0, "filings_discovered"] == 2
+    assert status.loc[0, "filings_processed"] == 2
+    assert len(inventory) == 2
+    assert inventory["processed_successfully"].tolist() == [True, True]
+    assert screening["espp_mention_flag"].tolist() == [True, True]
+    assert metrics.loc[0, "cache_misses_total"] == 5

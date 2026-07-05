@@ -21,6 +21,7 @@ price_source: csv
 price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
 
 filings:
+  source: fixture
   fixture_dir: "fixtures/sec_filings"
 
 reviews:
