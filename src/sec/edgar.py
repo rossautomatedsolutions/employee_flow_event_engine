@@ -30,6 +30,8 @@ class SECFilingSourceConfig:
     fixture_dir: Path | None = None
     sec_user_agent: str | None = None
     forms: tuple[str, ...] = DEFAULT_SEC_FORMS
+    filing_start_date: date | None = None
+    filing_end_date: date | None = None
     max_filings_per_issuer: int = 6
     cache_only: bool = False
     request_delay_seconds: float = 0.2
@@ -46,6 +48,7 @@ class SecFilingMetadata:
     accession_nodashes: str
     form: str
     filing_date: date
+    report_date: date | None
     primary_document: str
     primary_doc_description: str
     submission_source_file: str
@@ -74,8 +77,14 @@ class FilingAcquisitionMetrics:
     source_mode: str
     cache_only: bool
     filings_discovered: int = 0
+    filings_matching_forms: int = 0
+    filings_in_date_window: int = 0
     filings_selected: int = 0
     filings_processed: int = 0
+    configured_filing_start_date: date | None = None
+    configured_filing_end_date: date | None = None
+    effective_filing_start_date: date | None = None
+    effective_filing_end_date: date | None = None
     submissions_cache_hits: int = 0
     submissions_cache_misses: int = 0
     index_cache_hits: int = 0
@@ -104,8 +113,14 @@ class FilingAcquisitionMetrics:
             "source_mode": self.source_mode,
             "cache_only": self.cache_only,
             "filings_discovered": int(self.filings_discovered),
+            "filings_matching_forms": int(self.filings_matching_forms),
+            "filings_in_date_window": int(self.filings_in_date_window),
             "filings_selected": int(self.filings_selected),
             "filings_processed": int(self.filings_processed),
+            "configured_filing_start_date": self.configured_filing_start_date.isoformat() if self.configured_filing_start_date else None,
+            "configured_filing_end_date": self.configured_filing_end_date.isoformat() if self.configured_filing_end_date else None,
+            "effective_filing_start_date": self.effective_filing_start_date.isoformat() if self.effective_filing_start_date else None,
+            "effective_filing_end_date": self.effective_filing_end_date.isoformat() if self.effective_filing_end_date else None,
             "submissions_cache_hits": int(self.submissions_cache_hits),
             "submissions_cache_misses": int(self.submissions_cache_misses),
             "index_cache_hits": int(self.index_cache_hits),
@@ -202,6 +217,25 @@ def build_sec_http_client(config: SECFilingSourceConfig) -> SecHttpClient:
     )
 
 
+def _matches_form_filter(form: str, filing_config: SECFilingSourceConfig) -> bool:
+    forms = {candidate.strip().upper() for candidate in filing_config.forms if candidate and candidate.strip()}
+    return form.strip().upper() in forms
+
+
+def _in_filing_date_window(filing_date: date, filing_config: SECFilingSourceConfig) -> bool:
+    if filing_config.filing_start_date is not None and filing_date < filing_config.filing_start_date:
+        return False
+    if filing_config.filing_end_date is not None and filing_date > filing_config.filing_end_date:
+        return False
+    return True
+
+
+def _effective_date_range(dates: list[date]) -> tuple[date | None, date | None]:
+    if not dates:
+        return None, None
+    return min(dates), max(dates)
+
+
 def load_batch_filing_inputs(
     filing_config: SECFilingSourceConfig,
     cache_dir: Path,
@@ -230,43 +264,68 @@ def _load_fixture_inputs(
     cik: str,
 ) -> Phase2FilingAcquisitionResult:
     fixture_dir = filing_config.fixture_dir
-    documents = load_filing_documents_from_fixtures(fixture_dir, ticker=ticker) if fixture_dir is not None else []
-    hints = [extract_espp_hints(document) for document in documents]
+    discovered_documents = load_filing_documents_from_fixtures(fixture_dir, ticker=ticker) if fixture_dir is not None else []
+    form_matched_documents = [document for document in discovered_documents if _matches_form_filter(document.filing_type, filing_config)]
+    in_window_documents = [document for document in form_matched_documents if _in_filing_date_window(document.filing_date, filing_config)]
+    selected_documents = in_window_documents[: filing_config.max_filings_per_issuer]
+    effective_start_date, effective_end_date = _effective_date_range([document.filing_date for document in selected_documents])
+    hints = [extract_espp_hints(document) for document in selected_documents]
     metrics = FilingAcquisitionMetrics(
         ticker=ticker,
         cik=cik,
         source_mode="fixture",
         cache_only=bool(filing_config.cache_only),
-        filings_discovered=len(documents),
-        filings_selected=len(documents),
-        filings_processed=len(documents),
+        filings_discovered=len(discovered_documents),
+        filings_matching_forms=len(form_matched_documents),
+        filings_in_date_window=len(in_window_documents),
+        filings_selected=len(selected_documents),
+        filings_processed=len(selected_documents),
+        configured_filing_start_date=filing_config.filing_start_date,
+        configured_filing_end_date=filing_config.filing_end_date,
+        effective_filing_start_date=effective_start_date,
+        effective_filing_end_date=effective_end_date,
     )
 
+    selected_source_ids = {document.source_id for document in selected_documents}
+    screened_source_ids = {
+        hint.source_id
+        for hint in hints
+        if bool(hint.matched_terms or hint.confidence > 0)
+    }
     inventory_rows = [
         {
             "ticker": document.ticker,
             "cik": cik,
             "source_mode": "fixture",
             "source_id": document.source_id,
-            "accession_number": document.source_id,
+            "accession_number": document.accession_number or document.source_id,
             "filing_type": document.filing_type,
             "filing_date": document.filing_date.isoformat(),
+            "report_date": document.report_date.isoformat() if document.report_date else None,
             "primary_document": None,
             "primary_doc_description": None,
             "filing_url": document.source_url,
             "index_url": None,
             "document_cache_path": document.source_cache_path,
+            "configured_filing_start_date": filing_config.filing_start_date.isoformat() if filing_config.filing_start_date else None,
+            "configured_filing_end_date": filing_config.filing_end_date.isoformat() if filing_config.filing_end_date else None,
+            "effective_filing_start_date": effective_start_date.isoformat() if effective_start_date else None,
+            "effective_filing_end_date": effective_end_date.isoformat() if effective_end_date else None,
+            "matches_form_filter": _matches_form_filter(document.filing_type, filing_config),
+            "in_filing_date_window": _in_filing_date_window(document.filing_date, filing_config),
+            "selected_after_safety_cap": document.source_id in selected_source_ids,
+            "screening_passed": document.source_id in screened_source_ids,
             "submissions_source": "na",
             "index_source": "na",
-            "document_source": "fixture",
-            "processed_successfully": True,
+            "document_source": "fixture" if document.source_id in selected_source_ids else "not_selected",
+            "processed_successfully": document.source_id in selected_source_ids,
             "warning": "",
         }
-        for document in documents
+        for document in discovered_documents
     ]
-    screening_rows = _screening_rows(hints, cik=cik)
+    screening_rows = _screening_rows(selected_documents, hints, cik=cik)
     return Phase2FilingAcquisitionResult(
-        documents=documents,
+        documents=selected_documents,
         hints=hints,
         inventory_frame=pd.DataFrame(inventory_rows),
         screening_frame=pd.DataFrame(screening_rows),
@@ -287,6 +346,8 @@ def _load_sec_inputs(
         cik=cik,
         source_mode="sec",
         cache_only=bool(filing_config.cache_only),
+        configured_filing_start_date=filing_config.filing_start_date,
+        configured_filing_end_date=filing_config.filing_end_date,
     )
     cache_root = cache_dir
     cache_root.mkdir(parents=True, exist_ok=True)
@@ -301,7 +362,7 @@ def _load_sec_inputs(
         miss_field="submissions_cache_misses",
         label=f"submissions JSON for {ticker}",
     )
-    filing_metadata = _select_filing_metadata(
+    discovered_metadata = _select_filing_metadata(
         submissions_payload,
         filing_config=filing_config,
         client=client,
@@ -311,13 +372,51 @@ def _load_sec_inputs(
         company_name=company_name,
         metrics=metrics,
     )
-    metrics.filings_discovered = len(filing_metadata)
-    selected_filings = filing_metadata[: filing_config.max_filings_per_issuer]
+    metrics.filings_discovered = len(discovered_metadata)
+    form_matched_metadata = [metadata for metadata in discovered_metadata if _matches_form_filter(metadata.form, filing_config)]
+    in_window_metadata = [metadata for metadata in form_matched_metadata if _in_filing_date_window(metadata.filing_date, filing_config)]
+    selected_filings = in_window_metadata[: filing_config.max_filings_per_issuer]
+    metrics.filings_matching_forms = len(form_matched_metadata)
+    metrics.filings_in_date_window = len(in_window_metadata)
     metrics.filings_selected = len(selected_filings)
+    effective_start_date, effective_end_date = _effective_date_range([metadata.filing_date for metadata in selected_filings])
+    metrics.effective_filing_start_date = effective_start_date
+    metrics.effective_filing_end_date = effective_end_date
 
     documents: list[FilingDocument] = []
     hints: list[ESPPFilingHint] = []
-    inventory_rows: list[dict[str, object]] = []
+    selected_accessions = {metadata.accession_number for metadata in selected_filings}
+    inventory_rows_by_accession = {
+        metadata.accession_number: {
+            "ticker": metadata.ticker,
+            "cik": metadata.cik,
+            "source_mode": "sec",
+            "source_id": metadata.accession_number,
+            "accession_number": metadata.accession_number,
+            "filing_type": metadata.form,
+            "filing_date": metadata.filing_date.isoformat(),
+            "report_date": metadata.report_date.isoformat() if metadata.report_date else None,
+            "primary_document": metadata.primary_document,
+            "primary_doc_description": metadata.primary_doc_description,
+            "filing_url": metadata.document_url,
+            "index_url": metadata.index_url,
+            "document_cache_path": str(_filing_directory(cache_root, cik, metadata.accession_nodashes) / metadata.primary_document),
+            "configured_filing_start_date": filing_config.filing_start_date.isoformat() if filing_config.filing_start_date else None,
+            "configured_filing_end_date": filing_config.filing_end_date.isoformat() if filing_config.filing_end_date else None,
+            "effective_filing_start_date": effective_start_date.isoformat() if effective_start_date else None,
+            "effective_filing_end_date": effective_end_date.isoformat() if effective_end_date else None,
+            "matches_form_filter": _matches_form_filter(metadata.form, filing_config),
+            "in_filing_date_window": _in_filing_date_window(metadata.filing_date, filing_config),
+            "selected_after_safety_cap": metadata.accession_number in selected_accessions,
+            "screening_passed": False,
+            "submissions_source": metadata.submission_source_file,
+            "index_source": "not_requested",
+            "document_source": "not_requested",
+            "processed_successfully": False,
+            "warning": "",
+        }
+        for metadata in discovered_metadata
+    }
     for metadata in selected_filings:
         try:
             document, hint, inventory_row = _download_sec_filing(
@@ -329,56 +428,48 @@ def _load_sec_inputs(
             )
             documents.append(document)
             hints.append(hint)
-            inventory_rows.append(inventory_row)
+            inventory_rows_by_accession[metadata.accession_number] = inventory_row
         except Exception as exc:
             message = f"{ticker} {metadata.form} {metadata.accession_number}: {exc}"
             LOGGER.warning("%s", message)
             metrics.warning_messages.append(message)
-            inventory_rows.append(
-                {
-                    "ticker": ticker,
-                    "cik": cik,
-                    "source_mode": "sec",
-                    "source_id": metadata.accession_number,
-                    "accession_number": metadata.accession_number,
-                    "filing_type": metadata.form,
-                    "filing_date": metadata.filing_date.isoformat(),
-                    "primary_document": metadata.primary_document,
-                    "primary_doc_description": metadata.primary_doc_description,
-                    "filing_url": metadata.document_url,
-                    "index_url": metadata.index_url,
-                    "document_cache_path": str(_filing_directory(cache_root, cik, metadata.accession_nodashes) / metadata.primary_document),
-                    "submissions_source": "see_metrics",
-                    "index_source": "error",
-                    "document_source": "error",
-                    "processed_successfully": False,
-                    "warning": str(exc),
-                }
-            )
+            inventory_rows_by_accession[metadata.accession_number] = {
+                **inventory_rows_by_accession[metadata.accession_number],
+                "index_source": "error",
+                "document_source": "error",
+                "processed_successfully": False,
+                "warning": str(exc),
+            }
 
     metrics.filings_processed = len(documents)
 
-    screening_rows = _screening_rows(hints, cik=cik)
+    screening_rows = _screening_rows(documents, hints, cik=cik)
     return Phase2FilingAcquisitionResult(
         documents=documents,
         hints=hints,
-        inventory_frame=pd.DataFrame(inventory_rows),
+        inventory_frame=pd.DataFrame(inventory_rows_by_accession.values()).sort_values(
+            ["filing_date", "filing_type", "accession_number"],
+            ascending=[False, True, True],
+            ignore_index=True,
+        ),
         screening_frame=pd.DataFrame(screening_rows),
         metrics=metrics,
     )
 
 
-def _screening_rows(hints: list[ESPPFilingHint], cik: str) -> list[dict[str, object]]:
+def _screening_rows(documents: list[FilingDocument], hints: list[ESPPFilingHint], cik: str) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for hint in hints:
+    for document, hint in zip(documents, hints):
         rows.append(
             {
                 "ticker": hint.ticker,
                 "cik": cik,
                 "source_mode": hint.source_kind,
                 "source_id": hint.source_id,
+                "accession_number": document.accession_number or hint.source_id,
                 "filing_type": hint.filing_type,
                 "filing_date": hint.filing_date.isoformat(),
+                "report_date": document.report_date.isoformat() if document.report_date else None,
                 "espp_mention_flag": bool(hint.matched_terms or hint.confidence > 0),
                 "confidence": float(hint.confidence),
                 "matched_terms": " | ".join(hint.matched_terms),
@@ -458,7 +549,6 @@ def _select_filing_metadata(
     company_name: str,
     metrics: FilingAcquisitionMetrics,
 ) -> list[SecFilingMetadata]:
-    forms = {form.strip().upper() for form in filing_config.forms if form and form.strip()}
     metadata_rows = _metadata_from_payload(
         submissions_payload,
         ticker=ticker,
@@ -495,8 +585,6 @@ def _select_filing_metadata(
 
     deduped: dict[str, SecFilingMetadata] = {}
     for row in metadata_rows:
-        if row.form.upper() not in forms:
-            continue
         deduped.setdefault(row.accession_number, row)
 
     return sorted(
@@ -521,17 +609,17 @@ def _metadata_from_payload(
     forms = table.get("form", [])
     primary_documents = table.get("primaryDocument", [])
     descriptions = table.get("primaryDocDescription", [])
+    report_dates = table.get("reportDate", [])
 
     rows: list[SecFilingMetadata] = []
-    for accession, filing_date, form, primary_document, description in zip(
-        accessions,
-        filing_dates,
-        forms,
-        primary_documents,
-        descriptions,
-    ):
+    for index, accession in enumerate(accessions):
+        filing_date = filing_dates[index] if index < len(filing_dates) else None
+        form = forms[index] if index < len(forms) else ""
+        primary_document = primary_documents[index] if index < len(primary_documents) else ""
+        description = descriptions[index] if index < len(descriptions) else ""
+        report_date = report_dates[index] if index < len(report_dates) else None
         accession_str = str(accession).strip()
-        if not accession_str:
+        if not accession_str or not filing_date:
             continue
         rows.append(
             SecFilingMetadata(
@@ -542,6 +630,7 @@ def _metadata_from_payload(
                 accession_nodashes=accession_str.replace("-", ""),
                 form=str(form).strip(),
                 filing_date=date.fromisoformat(str(filing_date)),
+                report_date=date.fromisoformat(str(report_date)) if report_date else None,
                 primary_document=str(primary_document).strip(),
                 primary_doc_description=str(description).strip(),
                 submission_source_file=default_source_file,
@@ -590,6 +679,7 @@ def _download_sec_filing(
                 "accession_number": metadata.accession_number,
                 "form": metadata.form,
                 "filing_date": metadata.filing_date.isoformat(),
+                "report_date": metadata.report_date.isoformat() if metadata.report_date else None,
                 "primary_document": primary_document_name,
                 "primary_doc_description": metadata.primary_doc_description,
                 "document_url": document_url,
@@ -612,6 +702,10 @@ def _download_sec_filing(
         source_kind="sec",
         source_url=document_url,
         source_cache_path=str(document_path),
+        accession_number=metadata.accession_number,
+        report_date=metadata.report_date,
+        issuer_name=metadata.company_name,
+        cik=metadata.cik,
     )
     hint = extract_espp_hints(document)
     inventory_row = {
@@ -622,11 +716,20 @@ def _download_sec_filing(
         "accession_number": metadata.accession_number,
         "filing_type": metadata.form,
         "filing_date": metadata.filing_date.isoformat(),
+        "report_date": metadata.report_date.isoformat() if metadata.report_date else None,
         "primary_document": primary_document_name,
         "primary_doc_description": metadata.primary_doc_description,
         "filing_url": document_url,
         "index_url": metadata.index_url,
         "document_cache_path": str(document_path),
+        "configured_filing_start_date": filing_config.filing_start_date.isoformat() if filing_config.filing_start_date else None,
+        "configured_filing_end_date": filing_config.filing_end_date.isoformat() if filing_config.filing_end_date else None,
+        "effective_filing_start_date": metrics.effective_filing_start_date.isoformat() if metrics.effective_filing_start_date else None,
+        "effective_filing_end_date": metrics.effective_filing_end_date.isoformat() if metrics.effective_filing_end_date else None,
+        "matches_form_filter": _matches_form_filter(metadata.form, filing_config),
+        "in_filing_date_window": _in_filing_date_window(metadata.filing_date, filing_config),
+        "selected_after_safety_cap": True,
+        "screening_passed": bool(hint.matched_terms or hint.confidence > 0),
         "submissions_source": metadata.submission_source_file,
         "index_source": index_source,
         "document_source": document_source,

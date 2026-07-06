@@ -12,6 +12,16 @@ from src.sec.edgar import DEFAULT_SEC_FORMS, SECFilingSourceConfig
 
 
 @dataclass(slots=True)
+class Phase3CandidateConfig:
+    enabled: bool = False
+    screened_only: bool = True
+    diagnostic_extract_from_unscreened_filings: bool = False
+    context_window_chars: int = 240
+    require_review_for_validated_windows: bool = True
+    generate_provisional_unreviewed_windows: bool = False
+
+
+@dataclass(slots=True)
 class BatchRunConfig:
     benchmark: str
     universe_file: Path
@@ -30,6 +40,7 @@ class BatchRunConfig:
     filing_fixture_dir: Path | None
     review_file: Path | None
     event_study: EventStudyConfig
+    phase3: Phase3CandidateConfig
 
 
 def _parse_date(value: object, field: str) -> date:
@@ -62,6 +73,7 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
 
     event_cfg = raw.get("event_study", {})
     filings_cfg = raw.get("filings", {})
+    phase3_cfg = raw.get("phase3", {})
     sec_user_agent = str(filings_cfg.get("sec_user_agent") or os.environ.get("SEC_EDGAR_USER_AGENT", "")).strip() or None
     filing_source = str(filings_cfg.get("source", "fixture")).strip().lower()
     filings = SECFilingSourceConfig(
@@ -69,6 +81,8 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         fixture_dir=Path(filings_cfg["fixture_dir"]) if filings_cfg.get("fixture_dir") else None,
         sec_user_agent=sec_user_agent,
         forms=_as_string_tuple(filings_cfg.get("forms"), "filings.forms", DEFAULT_SEC_FORMS),
+        filing_start_date=_parse_date(filings_cfg["filing_start_date"], "filings.filing_start_date") if filings_cfg.get("filing_start_date") else None,
+        filing_end_date=_parse_date(filings_cfg["filing_end_date"], "filings.filing_end_date") if filings_cfg.get("filing_end_date") else None,
         max_filings_per_issuer=int(filings_cfg.get("max_filings_per_issuer", 6)),
         cache_only=bool(filings_cfg.get("cache_only", False)),
         request_delay_seconds=float(filings_cfg.get("request_delay_seconds", 0.2)),
@@ -98,6 +112,14 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
             volume_lookback=int(event_cfg.get("volume_lookback", 20)),
             label="phase2_batch",
         ),
+        phase3=Phase3CandidateConfig(
+            enabled=bool(phase3_cfg.get("enabled", False)),
+            screened_only=bool(phase3_cfg.get("screened_only", True)),
+            diagnostic_extract_from_unscreened_filings=bool(phase3_cfg.get("diagnostic_extract_from_unscreened_filings", False)),
+            context_window_chars=int(phase3_cfg.get("context_window_chars", 240)),
+            require_review_for_validated_windows=bool(phase3_cfg.get("require_review_for_validated_windows", True)),
+            generate_provisional_unreviewed_windows=bool(phase3_cfg.get("generate_provisional_unreviewed_windows", False)),
+        ),
     )
     if config.end_date < config.start_date:
         raise ValueError("end_date must be on or after start_date")
@@ -109,6 +131,9 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         raise ValueError("filings.source must be either 'fixture' or 'sec'")
     if config.filings.source == "fixture" and config.filing_fixture_dir is None:
         raise ValueError("filings.fixture_dir is required when filings.source is 'fixture'")
+    if config.filings.filing_start_date and config.filings.filing_end_date:
+        if config.filings.filing_end_date < config.filings.filing_start_date:
+            raise ValueError("filings.filing_end_date must be on or after filings.filing_start_date")
     if config.filings.max_filings_per_issuer <= 0:
         raise ValueError("filings.max_filings_per_issuer must be positive")
     if config.filings.max_retries < 0:
@@ -120,4 +145,12 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
             raise ValueError("filings.sec_user_agent or SEC_EDGAR_USER_AGENT is required when filings.source is 'sec'")
         if not config.filings.cache_only and config.filings.request_delay_seconds < 0.1:
             raise ValueError("filings.request_delay_seconds must be at least 0.1 seconds for live SEC requests")
+    if config.phase3.context_window_chars <= 0:
+        raise ValueError("phase3.context_window_chars must be positive")
+    if not config.phase3.screened_only:
+        raise ValueError("phase3.screened_only must remain true in this bounded research increment")
+    if config.phase3.diagnostic_extract_from_unscreened_filings and not config.phase3.enabled:
+        raise ValueError("phase3.enabled must be true when diagnostic extraction override is enabled")
+    if config.phase3.generate_provisional_unreviewed_windows and not config.phase3.enabled:
+        raise ValueError("phase3.enabled must be true when provisional diagnostic windows are enabled")
     return config

@@ -5,7 +5,7 @@
 The repository now has two explicit tracks:
 
 - Phase 1: a tested offline fixture workflow for deterministic ESPP event extraction, review, audit, and event-study replay.
-- Phase 2: an initial batch-processing scaffold for scalable, auditable research-dataset construction over a dated current S&P 500 universe snapshot.
+- Phase 2 / 3: a scalable batch-processing scaffold for auditable research-dataset construction over a dated current S&P 500 universe snapshot, including bounded live SEC acquisition and a review-gated candidate queue.
 
 ## What it does
 
@@ -13,7 +13,8 @@ The repository now has two explicit tracks:
 - Loads local filing fixtures (YAML) for reproducible ESPP text inputs.
 - Can acquire bounded live SEC / EDGAR submissions and filing documents keyed by issuer CIK.
 - Parses filing text (10-K / DEF 14A style documents) for ESPP clues.
-- Generates approximate ESPP event dates with audit metadata.
+- Screens filings for ESPP mentions, extracts bounded candidate-date evidence, and generates a manual review queue.
+- Generates approximate ESPP event dates with audit metadata once candidates are reviewed or explicitly run in diagnostic mode.
 - Runs event studies over configurable windows (default `t-10` to `t+10`).
 - Filters for tradable candidates (volume spike threshold + minimum ESPP confidence).
 - Simulates an event strategy (default: enter `t+1` close, exit `t+5` close) and compares to a baseline.
@@ -39,6 +40,7 @@ src/
   pipeline/
     batch_config.py
     company_status.py
+    phase3_candidates.py
     run_batch.py
     run_event_study.py
   universe/
@@ -46,6 +48,8 @@ src/
 config/
   example.yaml
   phase2_example.yaml
+  phase3_live_sec_pilot_cache_only.yaml
+  phase3_live_sec_pilot_cache_only_diagnostic.yaml
   sp500_universe_2026-07-04.csv
 fixtures/
   prices/
@@ -108,6 +112,21 @@ The Phase 2B pilot also stays intentionally bounded:
 - it writes durable raw metadata and filing-document cache files under the configured `cache_dir`
 - it writes filing inventory, filing-level ESPP screening, and SEC acquisition metrics artifacts
 - it supports cache-only reruns through [`config/phase2_live_sec_pilot_cache_only.yaml`](config/phase2_live_sec_pilot_cache_only.yaml)
+
+### Phase 3A cache-only review-queue pilot
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only.yaml --force
+```
+
+The Phase 3A cache-only pilot keeps the same bounded five-company scope and adds:
+
+- explicit filing-date selection before the filing-count safety cap
+- separate stages for filing discovery, ESPP screening, candidate extraction, review, and event-window generation
+- bounded context extraction around ESPP-relevant text rather than whole-filing month/day scans in the primary path
+- raw candidate preservation plus a deduplicated manual review queue
+- default exclusion of unreviewed live candidates from validated research windows
+- an optional diagnostic-only provisional-window rerun through [`config/phase3_live_sec_pilot_cache_only_diagnostic.yaml`](config/phase3_live_sec_pilot_cache_only_diagnostic.yaml)
 
 Research v0.1 includes two offline replay configs:
 
@@ -180,6 +199,8 @@ The live pilot configuration adds:
 
 - `filings.sec_user_agent`
 - `filings.forms`
+- `filings.filing_start_date`
+- `filings.filing_end_date`
 - `filings.max_filings_per_issuer`
 - `filings.cache_only`
 - `filings.request_delay_seconds`
@@ -189,6 +210,15 @@ The live pilot configuration adds:
 The committed live pilot configs intentionally omit a concrete
 `filings.sec_user_agent` value so personal contact details are not stored in
 the repository.
+
+Filing selection is deterministic and staged:
+
+1. discover all deduplicated filing metadata for the issuer
+2. apply allowed form filters
+3. apply the configured filing-date window
+4. apply the maximum-filings-per-issuer safety cap
+
+The resulting artifacts keep those stage counts separate so the review queue is auditable.
 
 The SEC cache layout is:
 
@@ -219,6 +249,16 @@ Review statuses:
 - `corrected`: replace the event date used downstream with `reviewed_event_date`
 - `rejected`: exclude the event from downstream event-study windows
 
+Phase 3 review queues also include reviewer-facing editable columns:
+
+- `review_status`
+- `corrected_event_date`
+- `reviewer_note`
+- `reviewed_at`
+- `reviewer_id`
+
+If a Phase 3 review queue is supplied back to the pipeline with blank review fields, those rows remain `unreviewed` and therefore ineligible for validated research outputs.
+
 Example:
 
 ```csv
@@ -244,6 +284,13 @@ Under the configured Phase 2 output directory:
 - `reports/universe_validation_report.md`
 - `reports/phase2_research_summary.md`
 
+Phase 3A runs add:
+
+- `raw_candidate_extractions.csv`
+- `candidate_review_queue.csv`
+- `provisional_diagnostic_candidate_audit.csv` when diagnostic provisional mode is enabled
+- `provisional_diagnostic_event_windows.csv` when diagnostic provisional mode is enabled
+
 `company_processing_status.csv` includes per-company batch state such as:
 
 - `ticker`
@@ -262,6 +309,15 @@ Under the configured Phase 2 output directory:
 - `warning_count`
 - `error_message`
 - `processing_timestamp`
+
+Phase 3A status rows also carry:
+
+- filing discovery and selection-stage counts
+- configured and effective filing-date windows
+- raw-candidate counts
+- deduplicated review-queue counts
+- candidates awaiting review
+- provisional diagnostic-window counts
 
 Secondary share classes in legitimate duplicate-CIK groups are marked as `skipped` so filing research is not duplicated across multiple listed share classes.
 
@@ -366,6 +422,41 @@ Source notes for the current dated snapshot live in [`config/sp500_universe_2026
 - The live SEC path is a bounded five-company pilot only. It is not a full S&P 500 run.
 - SEC requests are intentionally sequential and throttled; the repo does not issue parallel EDGAR requests.
 - Filing-level ESPP screening is heuristic and auditable, but it does not automatically accept an inferred event as ground truth.
+- Phase 3A candidate extraction is deterministic and bounded, but it still requires human review before live candidates become validated research events.
+- Recurring plan language, approval language, amendment language, and schedule-like text are preserved and flagged rather than auto-accepted as purchase events.
+
+## Phase 3A review flow
+
+Phase 3A makes the stage boundaries explicit:
+
+1. filing discovery and acquisition
+2. ESPP mention screening
+3. bounded candidate-date extraction
+4. manual review decisions
+5. validated event-window generation
+
+The primary Phase 3 path only extracts from filings that pass ESPP screening. A diagnostic override can also extract from non-screened filings, but those results remain diagnostic-only and are written separately from validated research outputs.
+
+Candidate-quality metadata includes:
+
+- source accession and filing metadata
+- source phrase and bounded snippet
+- matched ESPP term(s)
+- extraction rule and deterministic confidence
+- ambiguity flags
+- explicit-year versus inferred-year indicators
+- recurring-language indicators
+- likely purchase-date versus likely non-purchase-language flags
+- duplicate-group identifiers and review eligibility
+
+Deduplication preserves every raw row while also producing one canonical review-queue row per candidate group, including contributing accessions, contributing filing dates, duplicate counts, and a deterministic deduplication reason.
+
+Validated versus provisional outputs are intentionally separated:
+
+- `espp_date_audit.csv` and `all_event_windows.csv` are the validated research path
+- `provisional_diagnostic_candidate_audit.csv` and `provisional_diagnostic_event_windows.csv` are diagnostic-only when enabled
+- unreviewed candidates do not enter the validated event-study dataset
+- provisional diagnostic windows are not merged into the validated research summary
 
 ## Current date-identification limitations
 

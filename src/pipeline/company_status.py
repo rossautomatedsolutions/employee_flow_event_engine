@@ -18,12 +18,23 @@ STATUS_COLUMNS = [
     "is_primary_share_class",
     "processing_status",
     "filings_discovered",
+    "filings_matching_forms",
+    "filings_in_date_window",
+    "filings_selected",
     "filings_processed",
+    "configured_filing_start_date",
+    "configured_filing_end_date",
+    "effective_filing_start_date",
+    "effective_filing_end_date",
     "espp_mentions_found",
+    "raw_candidate_count",
+    "deduplicated_candidate_count",
+    "candidates_awaiting_review",
     "candidate_events_found",
     "accepted_events",
     "corrected_events",
     "rejected_events",
+    "provisional_event_windows",
     "usable_event_windows",
     "warning_count",
     "error_message",
@@ -43,12 +54,23 @@ class CompanyProcessingStatus:
     is_primary_share_class: bool
     processing_status: str
     filings_discovered: int = 0
+    filings_matching_forms: int = 0
+    filings_in_date_window: int = 0
+    filings_selected: int = 0
     filings_processed: int = 0
+    configured_filing_start_date: str | None = None
+    configured_filing_end_date: str | None = None
+    effective_filing_start_date: str | None = None
+    effective_filing_end_date: str | None = None
     espp_mentions_found: int = 0
+    raw_candidate_count: int = 0
+    deduplicated_candidate_count: int = 0
+    candidates_awaiting_review: int = 0
     candidate_events_found: int = 0
     accepted_events: int = 0
     corrected_events: int = 0
     rejected_events: int = 0
+    provisional_event_windows: int = 0
     usable_event_windows: int = 0
     warning_count: int = 0
     error_message: str = ""
@@ -66,12 +88,23 @@ class CompanyProcessingStatus:
             "is_primary_share_class": self.is_primary_share_class,
             "processing_status": self.processing_status,
             "filings_discovered": int(self.filings_discovered),
+            "filings_matching_forms": int(self.filings_matching_forms),
+            "filings_in_date_window": int(self.filings_in_date_window),
+            "filings_selected": int(self.filings_selected),
             "filings_processed": int(self.filings_processed),
+            "configured_filing_start_date": self.configured_filing_start_date,
+            "configured_filing_end_date": self.configured_filing_end_date,
+            "effective_filing_start_date": self.effective_filing_start_date,
+            "effective_filing_end_date": self.effective_filing_end_date,
             "espp_mentions_found": int(self.espp_mentions_found),
+            "raw_candidate_count": int(self.raw_candidate_count),
+            "deduplicated_candidate_count": int(self.deduplicated_candidate_count),
+            "candidates_awaiting_review": int(self.candidates_awaiting_review),
             "candidate_events_found": int(self.candidate_events_found),
             "accepted_events": int(self.accepted_events),
             "corrected_events": int(self.corrected_events),
             "rejected_events": int(self.rejected_events),
+            "provisional_event_windows": int(self.provisional_event_windows),
             "usable_event_windows": int(self.usable_event_windows),
             "warning_count": int(self.warning_count),
             "error_message": self.error_message,
@@ -107,12 +140,19 @@ def read_status_frame(path: Path) -> pd.DataFrame:
         )
     numeric_columns = [
         "filings_discovered",
+        "filings_matching_forms",
+        "filings_in_date_window",
+        "filings_selected",
         "filings_processed",
         "espp_mentions_found",
+        "raw_candidate_count",
+        "deduplicated_candidate_count",
+        "candidates_awaiting_review",
         "candidate_events_found",
         "accepted_events",
         "corrected_events",
         "rejected_events",
+        "provisional_event_windows",
         "usable_event_windows",
         "warning_count",
     ]
@@ -121,6 +161,14 @@ def read_status_frame(path: Path) -> pd.DataFrame:
             frame[column] = frame[column].fillna(0).astype(int)
     if "processing_status" in frame.columns:
         frame["processing_status"] = frame["processing_status"].fillna("pending").astype(str)
+    for column in (
+        "configured_filing_start_date",
+        "configured_filing_end_date",
+        "effective_filing_start_date",
+        "effective_filing_end_date",
+    ):
+        if column in frame.columns:
+            frame[column] = frame[column].fillna("").astype(str)
     if "error_message" in frame.columns:
         frame["error_message"] = frame["error_message"].fillna("").astype(str)
     return frame.reindex(columns=STATUS_COLUMNS)

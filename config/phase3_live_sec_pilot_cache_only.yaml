@@ -1,0 +1,51 @@
+# Phase 3A cache-only review-queue pilot using the Phase 2B SEC cache.
+# This keeps the bounded five-company subset and requires manual review
+# before any candidates become validated research events.
+benchmark: SPY
+universe_file: "config/sp500_universe_2026-07-04.csv"
+ticker_subset:
+  - AAPL
+  - AMZN
+  - CRM
+  - MSFT
+  - NVDA
+start_date: "2024-06-28"
+end_date: "2025-01-03"
+output_dir: "artifacts/phase3_live_sec_pilot_cache_only"
+cache_dir: "artifacts/phase2_live_sec_cache"
+resume_mode: true
+offline_mode: false
+max_companies: 5
+
+price_source: csv
+price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
+
+filings:
+  source: sec
+  forms:
+    - 10-K
+    - 10-K/A
+    - DEF 14A
+  filing_start_date: "2023-07-01"
+  filing_end_date: "2026-05-31"
+  max_filings_per_issuer: 6
+  cache_only: true
+  request_delay_seconds: 0.2
+  max_retries: 3
+  timeout_seconds: 30
+
+reviews:
+  review_file: null
+
+phase3:
+  enabled: true
+  screened_only: true
+  diagnostic_extract_from_unscreened_filings: false
+  context_window_chars: 240
+  require_review_for_validated_windows: true
+  generate_provisional_unreviewed_windows: false
+
+event_study:
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5

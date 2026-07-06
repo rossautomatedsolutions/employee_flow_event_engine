@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError
 
@@ -225,3 +226,83 @@ def test_sec_http_client_retries_retryable_http_errors() -> None:
     assert abs(sleeps[0] - 0.2) < 1e-9
     assert all(abs(value) < 1e-9 for value in sleeps[1:])
     assert any(headers.get("User-agent") == "Retry Test retry@example.com" for headers in request_headers)
+
+
+def test_load_batch_filing_inputs_applies_date_window_before_safety_cap(tmp_path: Path, monkeypatch) -> None:
+    submissions_url = "https://data.sec.gov/submissions/CIK0000320193.json"
+    base_url = "https://www.sec.gov/Archives/edgar/data/320193"
+    accessions = [
+        "0000320193-24-000069",
+        "0000320193-24-000055",
+        "0000320193-23-000099",
+    ]
+    routes = {
+        submissions_url: "\n".join(
+            [
+                "{",
+                '  "cik": "0000320193",',
+                '  "filings": {"recent": {',
+                '    "accessionNumber": ["0000320193-24-000069", "0000320193-24-000055", "0000320193-23-000099"],',
+                '    "filingDate": ["2024-11-01", "2024-01-26", "2023-01-20"],',
+                '    "reportDate": ["2024-09-28", "2023-12-30", "2022-12-31"],',
+                '    "form": ["10-K", "DEF 14A", "10-K"],',
+                '    "primaryDocument": ["aapl-20240928x10k.htm", "def14a2024.htm", "aapl-20221231x10k.htm"],',
+                '    "primaryDocDescription": ["10-K", "DEF 14A", "10-K"]',
+                '  }, "files": []}',
+                "}",
+            ]
+        ),
+    }
+    for accession, document_name in (
+        (accessions[0], "aapl-20240928x10k.htm"),
+        (accessions[1], "def14a2024.htm"),
+    ):
+        accession_no_dashes = accession.replace("-", "")
+        routes[f"{base_url}/{accession_no_dashes}/index.json"] = f'{{"directory": {{"item": [{{"name": "{document_name}"}}]}}}}'
+        routes[f"{base_url}/{accession_no_dashes}/{document_name}"] = (
+            "<html><body>Employee Stock Purchase Plan purchase dates occur on June 30 and December 31.</body></html>"
+        )
+
+    import src.sec.edgar as sec_edgar
+
+    monkeypatch.setattr(
+        sec_edgar,
+        "build_sec_http_client",
+        lambda config: sec_edgar.SecHttpClient(
+            user_agent=str(config.sec_user_agent),
+            request_delay_seconds=float(config.request_delay_seconds),
+            max_retries=int(config.max_retries),
+            timeout_seconds=float(config.timeout_seconds),
+            opener=_fake_opener(routes),
+            sleep_func=lambda seconds: None,
+            clock=lambda: 1.0,
+        ),
+    )
+
+    result = load_batch_filing_inputs(
+        filing_config=SECFilingSourceConfig(
+            source="sec",
+            sec_user_agent="Test Company test@example.com",
+            forms=("10-K", "DEF 14A"),
+            filing_start_date=date.fromisoformat("2024-01-01"),
+            filing_end_date=date.fromisoformat("2024-12-31"),
+            max_filings_per_issuer=1,
+            cache_only=False,
+            request_delay_seconds=0.2,
+            max_retries=2,
+            timeout_seconds=5.0,
+        ),
+        cache_dir=tmp_path / "cache",
+        ticker="AAPL",
+        cik="0000320193",
+        company_name="Apple Inc.",
+    )
+
+    assert result.metrics.filings_discovered == 3
+    assert result.metrics.filings_matching_forms == 3
+    assert result.metrics.filings_in_date_window == 2
+    assert result.metrics.filings_selected == 1
+    assert result.metrics.filings_processed == 1
+    assert result.inventory_frame["matches_form_filter"].tolist() == [True, True, True]
+    assert result.inventory_frame["in_filing_date_window"].tolist() == [True, True, False]
+    assert result.inventory_frame["selected_after_safety_cap"].tolist() == [True, False, False]
