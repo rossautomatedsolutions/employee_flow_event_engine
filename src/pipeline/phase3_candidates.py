@@ -11,6 +11,11 @@ from src.data.sec_parser import ESPPContextMatch, ESPPFilingHint, FilingDocument
 from src.events.espp_event_extractor import ESPPEvent
 from src.pipeline.batch_config import Phase3CandidateConfig
 
+PRIMARY_QUEUE_DISPOSITION = "primary_review_queue"
+EXCLUDED_QUEUE_DISPOSITION = "excluded_from_primary_queue"
+PRIMARY_PRIORITY_TIERS = ("Tier1", "Tier2", "Tier3")
+EXCLUDED_PRIORITY_TIER = EXCLUDED_QUEUE_DISPOSITION
+
 MONTH_NAME_TO_NUMBER = {
     "january": 1,
     "february": 2,
@@ -36,6 +41,19 @@ PURCHASE_KEYWORD_PATTERN = re.compile(
     r"\b(purchase date|purchase dates|purchase period|purchase periods|shares are purchased|stock purchase)\b",
     flags=re.IGNORECASE,
 )
+STRONG_SPECIFIC_PURCHASE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "exercise_of_purchase_rights": re.compile(r"\bafter the exercise of purchase rights on that date\b", flags=re.IGNORECASE),
+    "current_purchase_period_runs_until": re.compile(r"\bcurrent purchase period which runs until\b", flags=re.IGNORECASE),
+}
+STRONG_RECURRING_PURCHASE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "purchase_dates_occur_on": re.compile(r"\bpurchase dates? occur on\b", flags=re.IGNORECASE),
+    "purchase_date_on_or_before": re.compile(r"\bpurchase date on the first trading day on or before\b", flags=re.IGNORECASE),
+    "ends_with_purchase_date": re.compile(r"\bends with a purchase date on the first trading day on or before\b", flags=re.IGNORECASE),
+    "named_purchase_period_dates": re.compile(
+        r"\bpurchase period\s*\((?:december|june|january|february|march|april|may|july|august|september|october|november)",
+        flags=re.IGNORECASE,
+    ),
+}
 RECURRING_LANGUAGE_PATTERNS: dict[str, re.Pattern[str]] = {
     "semiannual_cycle": re.compile(r"\b(semi[-\s]?annual|six[-\s]month|twice per year|twice each year)\b", flags=re.IGNORECASE),
     "quarterly_cycle": re.compile(r"\bquarterly\b", flags=re.IGNORECASE),
@@ -57,6 +75,36 @@ SCHEDULE_PATTERN = re.compile(
     r"\b(last business day|last day of (?:the )?period|semi[-\s]?annual purchase cycle|quarterly purchase cycle)\b",
     flags=re.IGNORECASE,
 )
+SUBSCRIPTION_CONTEXT_PATTERN = re.compile(r"\b(subscription date|subscription agreement)\b", flags=re.IGNORECASE)
+OFFERING_MECHANICS_PATTERN = re.compile(
+    r"\b(offering periods? begin|implemented by consecutive, overlapping offering periods|commencement date of each offering period|offering date)\b",
+    flags=re.IGNORECASE,
+)
+SNAPSHOT_CONTEXT_PATTERN = re.compile(
+    r"\b(as of|reserved for future issuance|remain(?:ed)? available for future issuance|shares subject to purchase during the purchase periods in effect|"
+    r"number of shares to be issued .* not determinable|eligible to participate|closing price|shares outstanding|aggregate unearned stock-based compensation expense|"
+    r"available under the espp|shares remaining available)\b",
+    flags=re.IGNORECASE,
+)
+STRONG_SNAPSHOT_CONTEXT_PATTERN = re.compile(
+    r"\b(shares subject to purchase during the purchase periods in effect as of|"
+    r"number of shares to be issued upon exercise of outstanding rights .* not determinable)\b",
+    flags=re.IGNORECASE,
+)
+UNRELATED_CONTEXT_PATTERN = re.compile(
+    r"\b(donations?|workforce|severance|job eliminations|stock-based compensation expense|expire or are canceled without delivery of shares)\b",
+    flags=re.IGNORECASE,
+)
+PLAN_HISTORY_PATTERN = re.compile(
+    r"\b(initially adopted by the board|approved by our stockholders|amended and restated|proposal is approved by our stockholders)\b",
+    flags=re.IGNORECASE,
+)
+SHARE_RESERVE_MECHANICS_PATTERN = re.compile(
+    r"\b(automatic annual increase|immediately preceding january 31|shares available under the espp|shares remaining available)\b",
+    flags=re.IGNORECASE,
+)
+SENTENCE_BOUNDARY_PATTERN = re.compile(r"[.!?]")
+CLAUSE_BOUNDARY_PATTERN = re.compile(r"[,:;()\[\]]")
 
 RAW_CANDIDATE_COLUMNS = [
     "raw_candidate_id",
@@ -86,6 +134,12 @@ RAW_CANDIDATE_COLUMNS = [
     "context_window_chars",
     "phrase_start_offset",
     "phrase_end_offset",
+    "distance_to_purchase_phrase",
+    "same_sentence_as_purchase_phrase",
+    "same_clause_as_purchase_phrase",
+    "attachment_score",
+    "nearest_purchase_phrase",
+    "truncated_snippet_boundary_indicator",
     "candidate_month_day",
     "candidate_event_date",
     "candidate_signature",
@@ -100,6 +154,12 @@ RAW_CANDIDATE_COLUMNS = [
     "likely_purchase_date_indicator",
     "likely_plan_adoption_amendment_expiration_approval_indicator",
     "non_purchase_language_flags",
+    "quality_category",
+    "queue_disposition",
+    "review_priority_tier",
+    "quality_decision_rule",
+    "exclusion_reason",
+    "shadowed_by_event_review_id",
     "duplicate_group_id",
     "event_review_id",
     "review_status",
@@ -128,6 +188,12 @@ REVIEW_QUEUE_COLUMNS = [
     "canonical_report_date",
     "source_phrase",
     "source_snippet",
+    "distance_to_purchase_phrase",
+    "same_sentence_as_purchase_phrase",
+    "same_clause_as_purchase_phrase",
+    "attachment_score",
+    "nearest_purchase_phrase",
+    "truncated_snippet_boundary_indicator",
     "matched_espp_terms",
     "matched_espp_term",
     "extraction_rule",
@@ -142,6 +208,12 @@ REVIEW_QUEUE_COLUMNS = [
     "likely_purchase_date_indicator",
     "likely_plan_adoption_amendment_expiration_approval_indicator",
     "non_purchase_language_flags",
+    "quality_category",
+    "queue_disposition",
+    "review_priority_tier",
+    "quality_decision_rule",
+    "exclusion_reason",
+    "shadowed_by_event_review_id",
     "duplicate_count",
     "contributing_accession_numbers",
     "contributing_filing_dates",
@@ -168,11 +240,23 @@ PHASE3_AUDIT_COLUMNS = [
 @dataclass(slots=True)
 class Phase3CandidateArtifacts:
     raw_candidates: pd.DataFrame
+    pre_refinement_review_queue: pd.DataFrame
     review_queue: pd.DataFrame
+    excluded_queue: pd.DataFrame
     validated_audit: pd.DataFrame
     validated_events: list[ESPPEvent]
     provisional_audit: pd.DataFrame
     provisional_events: list[ESPPEvent]
+
+
+@dataclass(slots=True)
+class AttachmentMetrics:
+    distance_to_purchase_phrase: int | None
+    same_sentence_as_purchase_phrase: bool
+    same_clause_as_purchase_phrase: bool
+    attachment_score: float
+    nearest_purchase_phrase: str | None
+    truncated_snippet_boundary_indicator: bool
 
 
 def _empty_review_frame() -> pd.DataFrame:
@@ -304,7 +388,9 @@ def build_phase3_candidate_artifacts(
         audited_review_queue = pd.DataFrame(columns=PHASE3_AUDIT_COLUMNS)
         return Phase3CandidateArtifacts(
             raw_candidates=raw_candidates,
+            pre_refinement_review_queue=pd.DataFrame(columns=REVIEW_QUEUE_COLUMNS),
             review_queue=pd.DataFrame(columns=REVIEW_QUEUE_COLUMNS),
+            excluded_queue=pd.DataFrame(columns=REVIEW_QUEUE_COLUMNS),
             validated_audit=audited_review_queue.copy(),
             validated_events=[],
             provisional_audit=pd.DataFrame(columns=PHASE3_AUDIT_COLUMNS),
@@ -312,11 +398,60 @@ def build_phase3_candidate_artifacts(
         )
 
     raw_candidates = _assign_duplicate_groups(raw_candidates)
-    review_queue = _build_review_queue(raw_candidates)
+    pre_refinement_review_queue = _build_review_queue(raw_candidates)
+    review_queue, excluded_queue = _refine_review_queue(pre_refinement_review_queue)
     audited_review_queue = _apply_reviews(review_queue, reviews, require_review_for_validated_windows=config.require_review_for_validated_windows)
+    finalized_excluded_queue = _finalize_excluded_queue(excluded_queue)
+    canonical_annotations = pd.concat(
+        [
+            audited_review_queue[
+                [
+                    "duplicate_group_id",
+                    "event_review_id",
+                    "quality_category",
+                    "queue_disposition",
+                    "review_priority_tier",
+                    "quality_decision_rule",
+                    "exclusion_reason",
+                    "shadowed_by_event_review_id",
+                    "review_status",
+                    "corrected_event_date",
+                    "reviewer_note",
+                    "reviewed_at",
+                    "reviewer_id",
+                    "eligibility_status_for_validated_research",
+                ]
+            ],
+            finalized_excluded_queue[
+                [
+                    "duplicate_group_id",
+                    "event_review_id",
+                    "quality_category",
+                    "queue_disposition",
+                    "review_priority_tier",
+                    "quality_decision_rule",
+                    "exclusion_reason",
+                    "shadowed_by_event_review_id",
+                    "review_status",
+                    "corrected_event_date",
+                    "reviewer_note",
+                    "reviewed_at",
+                    "reviewer_id",
+                    "eligibility_status_for_validated_research",
+                ]
+            ],
+        ],
+        ignore_index=True,
+    )
     enriched_raw = raw_candidates.drop(
         columns=[
             "event_review_id",
+            "quality_category",
+            "queue_disposition",
+            "review_priority_tier",
+            "quality_decision_rule",
+            "exclusion_reason",
+            "shadowed_by_event_review_id",
             "review_status",
             "corrected_event_date",
             "reviewer_note",
@@ -326,18 +461,7 @@ def build_phase3_candidate_artifacts(
         ],
         errors="ignore",
     ).merge(
-        audited_review_queue[
-            [
-                "duplicate_group_id",
-                "event_review_id",
-                "review_status",
-                "corrected_event_date",
-                "reviewer_note",
-                "reviewed_at",
-                "reviewer_id",
-                "eligibility_status_for_validated_research",
-            ]
-        ],
+        canonical_annotations,
         how="left",
         on="duplicate_group_id",
     ).reindex(columns=RAW_CANDIDATE_COLUMNS)
@@ -367,7 +491,15 @@ def build_phase3_candidate_artifacts(
             ["ticker", "candidate_event_date", "duplicate_group_id", "source_id", "phrase_start_offset"],
             ignore_index=True,
         ),
+        pre_refinement_review_queue=pre_refinement_review_queue.sort_values(
+            ["ticker", "candidate_event_date", "duplicate_group_id"],
+            ignore_index=True,
+        ),
         review_queue=audited_review_queue.reindex(columns=REVIEW_QUEUE_COLUMNS).sort_values(
+            ["ticker", "candidate_event_date", "duplicate_group_id"],
+            ignore_index=True,
+        ),
+        excluded_queue=finalized_excluded_queue.reindex(columns=REVIEW_QUEUE_COLUMNS).sort_values(
             ["ticker", "candidate_event_date", "duplicate_group_id"],
             ignore_index=True,
         ),
@@ -694,6 +826,9 @@ def _candidate_row(
     source_id = document.source_id or ""
     accession_number = document.accession_number or document.source_id or ""
     raw_candidate_id = f"{ticker}|{accession_number}|{raw_suffix}|{phrase_start}"
+    local_phrase_start = max(0, phrase_start - context_start)
+    local_phrase_end = max(local_phrase_start, phrase_end - context_start)
+    attachment = _attachment_metrics(source_snippet, local_phrase_start, local_phrase_end)
     return {
         "raw_candidate_id": raw_candidate_id,
         "ticker": ticker,
@@ -722,6 +857,12 @@ def _candidate_row(
         "context_window_chars": context_window_chars,
         "phrase_start_offset": phrase_start,
         "phrase_end_offset": phrase_end,
+        "distance_to_purchase_phrase": attachment.distance_to_purchase_phrase,
+        "same_sentence_as_purchase_phrase": attachment.same_sentence_as_purchase_phrase,
+        "same_clause_as_purchase_phrase": attachment.same_clause_as_purchase_phrase,
+        "attachment_score": attachment.attachment_score,
+        "nearest_purchase_phrase": attachment.nearest_purchase_phrase,
+        "truncated_snippet_boundary_indicator": attachment.truncated_snippet_boundary_indicator,
         "candidate_month_day": candidate_month_day,
         "candidate_event_date": candidate_event_date,
         "candidate_signature": candidate_signature,
@@ -736,6 +877,12 @@ def _candidate_row(
         "likely_purchase_date_indicator": likely_purchase,
         "likely_plan_adoption_amendment_expiration_approval_indicator": likely_non_purchase,
         "non_purchase_language_flags": " | ".join(non_purchase_flags),
+        "quality_category": None,
+        "queue_disposition": None,
+        "review_priority_tier": None,
+        "quality_decision_rule": None,
+        "exclusion_reason": None,
+        "shadowed_by_event_review_id": None,
         "duplicate_group_id": None,
         "event_review_id": None,
         "review_status": "unreviewed",
@@ -760,19 +907,21 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
         ordered["_specific_rank"] = ordered["specific_date_indicator"].astype(int)
         ordered["_purchase_rank"] = ordered["likely_purchase_date_indicator"].astype(int)
         ordered["_non_purchase_rank"] = ordered["likely_plan_adoption_amendment_expiration_approval_indicator"].astype(int)
+        ordered["_attachment_rank"] = ordered["attachment_score"].fillna(0.0).astype(float)
         ordered["_explicit_year_rank"] = ordered["explicit_year_indicator"].astype(int)
         ordered = ordered.sort_values(
             [
                 "_specific_rank",
                 "_purchase_rank",
                 "_non_purchase_rank",
+                "_attachment_rank",
                 "confidence",
                 "_explicit_year_rank",
                 "filing_date",
                 "accession_number",
                 "raw_candidate_id",
             ],
-            ascending=[False, False, True, False, False, False, True, True],
+            ascending=[False, False, True, False, False, False, False, True, True],
             ignore_index=True,
         )
         canonical = ordered.iloc[0]
@@ -800,6 +949,12 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
                 "canonical_report_date": _string_or_none(canonical.get("report_date")),
                 "source_phrase": _string_or_none(canonical.get("source_phrase")),
                 "source_snippet": _string_or_none(canonical.get("source_snippet")),
+                "distance_to_purchase_phrase": canonical.get("distance_to_purchase_phrase"),
+                "same_sentence_as_purchase_phrase": bool(canonical.get("same_sentence_as_purchase_phrase")),
+                "same_clause_as_purchase_phrase": bool(canonical.get("same_clause_as_purchase_phrase")),
+                "attachment_score": float(canonical.get("attachment_score", 0.0) or 0.0),
+                "nearest_purchase_phrase": _string_or_none(canonical.get("nearest_purchase_phrase")),
+                "truncated_snippet_boundary_indicator": bool(canonical.get("truncated_snippet_boundary_indicator")),
                 "matched_espp_terms": " | ".join(matched_terms_values),
                 "matched_espp_term": " | ".join(matched_term_values),
                 "extraction_rule": str(canonical["extraction_rule"]),
@@ -816,6 +971,12 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
                     canonical["likely_plan_adoption_amendment_expiration_approval_indicator"]
                 ),
                 "non_purchase_language_flags": _string_or_none(canonical.get("non_purchase_language_flags")),
+                "quality_category": None,
+                "queue_disposition": None,
+                "review_priority_tier": None,
+                "quality_decision_rule": None,
+                "exclusion_reason": None,
+                "shadowed_by_event_review_id": None,
                 "duplicate_count": int(len(group)),
                 "contributing_accession_numbers": " | ".join(contributing_accessions),
                 "contributing_filing_dates": " | ".join(contributing_filing_dates),
@@ -836,6 +997,256 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows).reindex(columns=REVIEW_QUEUE_COLUMNS)
+
+
+def _refine_review_queue(review_queue: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if review_queue.empty:
+        empty = pd.DataFrame(columns=REVIEW_QUEUE_COLUMNS)
+        return empty.copy(), empty.copy()
+
+    annotated = review_queue.copy()
+    decisions = annotated.apply(_quality_decision, axis=1, result_type="expand")
+    for column in decisions.columns:
+        annotated[column] = decisions[column].values
+    annotated = _apply_same_date_shadowing(annotated)
+
+    primary_queue = annotated[annotated["queue_disposition"] == PRIMARY_QUEUE_DISPOSITION].copy()
+    excluded_queue = annotated[annotated["queue_disposition"] == EXCLUDED_QUEUE_DISPOSITION].copy()
+    return (
+        primary_queue.reindex(columns=REVIEW_QUEUE_COLUMNS).reset_index(drop=True),
+        excluded_queue.reindex(columns=REVIEW_QUEUE_COLUMNS).reset_index(drop=True),
+    )
+
+
+def _finalize_excluded_queue(excluded_queue: pd.DataFrame) -> pd.DataFrame:
+    if excluded_queue.empty:
+        return pd.DataFrame(columns=REVIEW_QUEUE_COLUMNS)
+
+    finalized = excluded_queue.copy()
+    finalized["review_status"] = "unreviewed"
+    finalized["corrected_event_date"] = None
+    finalized["reviewer_note"] = None
+    finalized["reviewed_at"] = None
+    finalized["reviewer_id"] = None
+    finalized["eligibility_status_for_validated_research"] = "ineligible_excluded_from_primary_queue"
+    finalized["effective_event_date"] = finalized["candidate_event_date"]
+    finalized["included_in_event_study"] = False
+    return finalized.reindex(columns=REVIEW_QUEUE_COLUMNS).reset_index(drop=True)
+
+
+def _quality_decision(row: pd.Series) -> dict[str, object]:
+    snippet = _normalized_text(_string_or_none(row.get("source_snippet")) or "")
+    ambiguity_flags = set(_pipe_split_values(row.get("ambiguity_flags")))
+    non_purchase_flags = set(_pipe_split_values(row.get("non_purchase_language_flags")))
+    attachment_score = float(row.get("attachment_score", 0.0) or 0.0)
+    recurring = bool(row.get("recurring_language_indicator"))
+    likely_purchase = bool(row.get("likely_purchase_date_indicator"))
+    inferred_year = bool(row.get("inferred_year_indicator"))
+    same_sentence = bool(row.get("same_sentence_as_purchase_phrase"))
+    same_clause = bool(row.get("same_clause_as_purchase_phrase"))
+    truncated = bool(row.get("truncated_snippet_boundary_indicator"))
+    strong_specific = any(pattern.search(snippet) for pattern in STRONG_SPECIFIC_PURCHASE_PATTERNS.values())
+    strong_recurring = any(pattern.search(snippet) for pattern in STRONG_RECURRING_PURCHASE_PATTERNS.values())
+    plan_history = (
+        bool(non_purchase_flags.intersection({"plan_adoption", "board_approval", "shareholder_approval", "amendment", "termination"}))
+        or PLAN_HISTORY_PATTERN.search(snippet) is not None
+    )
+
+    if strong_specific and attachment_score >= 0.55:
+        return _decision(
+            category="plausible_specific_purchase_date",
+            tier="Tier1",
+            disposition=PRIMARY_QUEUE_DISPOSITION,
+            rule="strong_specific_purchase_language",
+        )
+
+    if strong_recurring and attachment_score >= 0.45:
+        tier = (
+            "Tier2"
+            if STRONG_RECURRING_PURCHASE_PATTERNS["purchase_date_on_or_before"].search(snippet) is not None or same_clause
+            else "Tier3"
+        )
+        return _decision(
+            category="plausible_recurring_purchase_schedule",
+            tier=tier,
+            disposition=PRIMARY_QUEUE_DISPOSITION,
+            rule="explicit_recurring_purchase_schedule",
+        )
+
+    if SUBSCRIPTION_CONTEXT_PATTERN.search(snippet):
+        return _decision(
+            category="subscription_or_enrollment_date",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="negative_context_subscription_date",
+            exclusion_reason="subscription_or_enrollment_date",
+        )
+
+    if plan_history:
+        return _decision(
+            category="plan_history_or_amendment_restatement",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="negative_context_plan_history",
+            exclusion_reason="plan_history_or_amendment_restatement",
+        )
+
+    if inferred_year and truncated:
+        return _decision(
+            category="multiple_dates_or_inferred_year_ambiguous",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="truncated_inferred_year_context",
+            exclusion_reason="multiple_dates_or_inferred_year_ambiguous",
+        )
+
+    if STRONG_SNAPSHOT_CONTEXT_PATTERN.search(snippet):
+        return _decision(
+            category="reporting_snapshot_or_share_reserve_context",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="strong_snapshot_context",
+            exclusion_reason="reporting_snapshot_or_share_reserve_context",
+        )
+
+    if OFFERING_MECHANICS_PATTERN.search(snippet) and not strong_specific and not strong_recurring:
+        return _decision(
+            category="offering_period_start_end_or_commencement",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="negative_context_offering_mechanics",
+            exclusion_reason="offering_period_start_end_or_commencement",
+        )
+
+    if UNRELATED_CONTEXT_PATTERN.search(snippet):
+        return _decision(
+            category="unrelated_adjacent_corporate_or_financial_date",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="negative_context_unrelated_adjacent_date",
+            exclusion_reason="unrelated_adjacent_corporate_or_financial_date",
+        )
+
+    if SNAPSHOT_CONTEXT_PATTERN.search(snippet) or SHARE_RESERVE_MECHANICS_PATTERN.search(snippet):
+        if attachment_score < 0.8:
+            return _decision(
+                category="reporting_snapshot_or_share_reserve_context",
+                tier=EXCLUDED_PRIORITY_TIER,
+                disposition=EXCLUDED_QUEUE_DISPOSITION,
+                rule="negative_context_reporting_snapshot",
+                exclusion_reason="reporting_snapshot_or_share_reserve_context",
+            )
+
+    if "multiple_dates_in_context" in ambiguity_flags and attachment_score < 0.5 and not likely_purchase:
+        return _decision(
+            category="multiple_dates_or_inferred_year_ambiguous",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="multiple_dates_low_attachment",
+            exclusion_reason="multiple_dates_or_inferred_year_ambiguous",
+        )
+
+    if inferred_year and attachment_score < 0.65:
+        return _decision(
+            category="multiple_dates_or_inferred_year_ambiguous",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="inferred_year_low_attachment",
+            exclusion_reason="multiple_dates_or_inferred_year_ambiguous",
+        )
+
+    if recurring and likely_purchase and attachment_score >= 0.55 and same_sentence:
+        return _decision(
+            category="plausible_recurring_purchase_schedule",
+            tier="Tier3",
+            disposition=PRIMARY_QUEUE_DISPOSITION,
+            rule="recurring_purchase_language_with_attachment",
+        )
+
+    if likely_purchase and attachment_score >= 0.65 and (same_sentence or same_clause):
+        return _decision(
+            category="plausible_specific_purchase_date",
+            tier="Tier3",
+            disposition=PRIMARY_QUEUE_DISPOSITION,
+            rule="purchase_language_with_attachment",
+        )
+
+    if "multiple_dates_in_context" in ambiguity_flags and attachment_score < 0.65:
+        return _decision(
+            category="multiple_dates_or_inferred_year_ambiguous",
+            tier=EXCLUDED_PRIORITY_TIER,
+            disposition=EXCLUDED_QUEUE_DISPOSITION,
+            rule="multiple_dates_unclear_attachment",
+            exclusion_reason="multiple_dates_or_inferred_year_ambiguous",
+        )
+
+    return _decision(
+        category="insufficient_context",
+        tier=EXCLUDED_PRIORITY_TIER,
+        disposition=EXCLUDED_QUEUE_DISPOSITION,
+        rule="insufficient_purchase_attachment",
+        exclusion_reason="insufficient_context",
+    )
+
+
+def _decision(
+    *,
+    category: str,
+    tier: str,
+    disposition: str,
+    rule: str,
+    exclusion_reason: str | None = None,
+    shadowed_by_event_review_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "quality_category": category,
+        "queue_disposition": disposition,
+        "review_priority_tier": tier,
+        "quality_decision_rule": rule,
+        "exclusion_reason": exclusion_reason,
+        "shadowed_by_event_review_id": shadowed_by_event_review_id,
+    }
+
+
+def _apply_same_date_shadowing(review_queue: pd.DataFrame) -> pd.DataFrame:
+    if review_queue.empty:
+        return review_queue
+
+    shadowed = review_queue.copy()
+    for _, group in shadowed.groupby(["ticker", "candidate_event_date"], dropna=False, sort=False):
+        candidate_event_date = _string_or_none(group.iloc[0].get("candidate_event_date"))
+        if not candidate_event_date:
+            continue
+        primary = group[group["queue_disposition"] == PRIMARY_QUEUE_DISPOSITION].copy()
+        if len(primary) <= 1:
+            continue
+        primary["_tier_rank"] = primary["review_priority_tier"].map(_priority_rank)
+        primary = primary.sort_values(
+            ["_tier_rank", "attachment_score", "confidence", "duplicate_count", "canonical_filing_date", "event_review_id"],
+            ascending=[True, False, False, False, False, True],
+            ignore_index=True,
+        )
+        keeper = str(primary.loc[0, "event_review_id"])
+        for event_review_id in primary.loc[1:, "event_review_id"].astype(str):
+            row_mask = shadowed["event_review_id"].astype(str) == event_review_id
+            shadowed.loc[row_mask, "quality_category"] = "duplicate_of_stronger_same_date_candidate"
+            shadowed.loc[row_mask, "queue_disposition"] = EXCLUDED_QUEUE_DISPOSITION
+            shadowed.loc[row_mask, "review_priority_tier"] = EXCLUDED_PRIORITY_TIER
+            shadowed.loc[row_mask, "quality_decision_rule"] = "shadowed_by_same_date_primary_candidate"
+            shadowed.loc[row_mask, "exclusion_reason"] = "shadowed_by_higher_priority_same_date_candidate"
+            shadowed.loc[row_mask, "shadowed_by_event_review_id"] = keeper
+    return shadowed
+
+
+def _priority_rank(tier: object) -> int:
+    value = str(tier or "").strip()
+    if value == "Tier1":
+        return 1
+    if value == "Tier2":
+        return 2
+    if value == "Tier3":
+        return 3
+    return 99
 
 
 def _apply_reviews(
@@ -996,6 +1407,88 @@ def _confidence_for_candidate(
     return "low", 0.35 if recurring_language or likely_non_purchase else 0.45
 
 
+def _attachment_metrics(snippet: str, phrase_start: int, phrase_end: int) -> AttachmentMetrics:
+    truncated = phrase_start <= 0 or phrase_end >= len(snippet)
+    purchase_matches = list(PURCHASE_KEYWORD_PATTERN.finditer(snippet))
+    if not purchase_matches:
+        return AttachmentMetrics(
+            distance_to_purchase_phrase=None,
+            same_sentence_as_purchase_phrase=False,
+            same_clause_as_purchase_phrase=False,
+            attachment_score=0.0,
+            nearest_purchase_phrase=None,
+            truncated_snippet_boundary_indicator=truncated,
+        )
+
+    best_match = min(
+        purchase_matches,
+        key=lambda match: _span_distance(phrase_start, phrase_end, match.start(), match.end()),
+    )
+    distance = _span_distance(phrase_start, phrase_end, best_match.start(), best_match.end())
+    same_sentence = _same_segment(snippet, phrase_start, phrase_end, best_match.start(), best_match.end(), SENTENCE_BOUNDARY_PATTERN)
+    same_clause = _same_segment(snippet, phrase_start, phrase_end, best_match.start(), best_match.end(), CLAUSE_BOUNDARY_PATTERN)
+
+    score = 0.0
+    if same_sentence:
+        score += 0.35
+    if same_clause:
+        score += 0.25
+    if distance == 0:
+        score += 0.30
+    elif distance <= 20:
+        score += 0.25
+    elif distance <= 40:
+        score += 0.20
+    elif distance <= 80:
+        score += 0.10
+    if any(pattern.search(snippet) for pattern in STRONG_SPECIFIC_PURCHASE_PATTERNS.values()):
+        score += 0.15
+    elif any(pattern.search(snippet) for pattern in STRONG_RECURRING_PURCHASE_PATTERNS.values()):
+        score += 0.10
+    if truncated and distance > 20:
+        score -= 0.15
+
+    return AttachmentMetrics(
+        distance_to_purchase_phrase=distance,
+        same_sentence_as_purchase_phrase=same_sentence,
+        same_clause_as_purchase_phrase=same_clause,
+        attachment_score=round(max(0.0, min(1.0, score)), 3),
+        nearest_purchase_phrase=best_match.group(0),
+        truncated_snippet_boundary_indicator=truncated,
+    )
+
+
+def _span_distance(a_start: int, a_end: int, b_start: int, b_end: int) -> int:
+    if a_end <= b_start:
+        return b_start - a_end
+    if b_end <= a_start:
+        return a_start - b_end
+    return 0
+
+
+def _same_segment(
+    text: str,
+    a_start: int,
+    a_end: int,
+    b_start: int,
+    b_end: int,
+    boundary_pattern: re.Pattern[str],
+) -> bool:
+    segment_start, segment_end = _segment_bounds(text, int((a_start + a_end) / 2), boundary_pattern)
+    return b_start >= segment_start and b_end <= segment_end
+
+
+def _segment_bounds(text: str, anchor: int, boundary_pattern: re.Pattern[str]) -> tuple[int, int]:
+    prior_end = 0
+    for match in boundary_pattern.finditer(text[:anchor]):
+        prior_end = match.end()
+    next_start = len(text)
+    upcoming = boundary_pattern.search(text, anchor)
+    if upcoming is not None:
+        next_start = upcoming.start()
+    return prior_end, next_start
+
+
 def _assign_next_occurrence(filing_date: date, month: int, day: int) -> date:
     event_year = filing_date.year
     if (month, day) < (filing_date.month, filing_date.day):
@@ -1035,6 +1528,17 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
         if value and value not in deduped:
             deduped.append(value)
     return deduped
+
+
+def _pipe_split_values(value: object) -> list[str]:
+    if value is None:
+        return []
+    items: list[str] = []
+    for part in str(value).split("|"):
+        stripped = part.strip()
+        if stripped and stripped.lower() != "nan":
+            items.append(stripped)
+    return items
 
 
 def _string_or_none(value: object) -> str | None:

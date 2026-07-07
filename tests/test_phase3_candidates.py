@@ -127,13 +127,90 @@ def test_phase3_deduplicates_candidates_and_flags_non_purchase_language() -> Non
     )
 
     assert len(artifacts.raw_candidates) == 3
-    assert len(artifacts.review_queue) == 2
+    assert len(artifacts.review_queue) == 1
+    assert len(artifacts.excluded_queue) == 1
     june_row = artifacts.review_queue[artifacts.review_queue["candidate_event_date"] == "2024-06-30"].iloc[0]
-    approval_row = artifacts.review_queue[artifacts.review_queue["candidate_event_date"] == "2024-04-10"].iloc[0]
     assert int(june_row["duplicate_count"]) == 2
     assert june_row["deduplication_reason"] == "same_event_across_filings"
+    approval_row = artifacts.excluded_queue[artifacts.excluded_queue["candidate_event_date"] == "2024-04-10"].iloc[0]
     assert bool(approval_row["likely_plan_adoption_amendment_expiration_approval_indicator"]) is True
     assert "shareholder_approval" in str(approval_row["non_purchase_language_flags"])
+
+
+def test_phase3_excludes_snapshot_and_plan_history_candidates_but_preserves_raw_rows() -> None:
+    purchase_doc = _document(
+        text=(
+            "Includes 73 shares remaining available for issuance as of June 30, 2024 under the "
+            "Employee Stock Purchase Plan, after the exercise of purchase rights on that date."
+        ),
+        source_id="0100",
+        filing_type="DEF 14A",
+    )
+    snapshot_doc = _document(
+        text=(
+            "Under our Employee Stock Purchase Plan, the number of shares to be issued upon exercise "
+            "of outstanding rights as of January 28, 2024 is not determinable."
+        ),
+        source_id="0101",
+        filing_type="DEF 14A",
+    )
+    amendment_doc = _document(
+        text="Apple Inc. Employee Stock Purchase Plan, as amended and restated as of March 10, 2015.",
+        source_id="0102",
+    )
+    documents = [purchase_doc, snapshot_doc, amendment_doc]
+    hints = [extract_espp_hints(document) for document in documents]
+
+    artifacts = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=documents,
+        hints=hints,
+        reviews=pd.DataFrame(),
+        config=Phase3CandidateConfig(enabled=True),
+    )
+
+    assert len(artifacts.raw_candidates) == 3
+    assert "attachment_score" in artifacts.raw_candidates.columns
+    assert set(artifacts.raw_candidates["queue_disposition"]) == {"primary_review_queue", "excluded_from_primary_queue"}
+    assert len(artifacts.review_queue) == 1
+    assert artifacts.review_queue.loc[0, "quality_category"] == "plausible_specific_purchase_date"
+    assert len(artifacts.excluded_queue) == 2
+    assert set(artifacts.excluded_queue["quality_category"]) == {
+        "plan_history_or_amendment_restatement",
+        "reporting_snapshot_or_share_reserve_context",
+    }
+
+
+def test_phase3_explicit_recurring_purchase_language_receives_priority_tiers() -> None:
+    document = _document(
+        text=(
+            "Employee Stock Purchase Plan purchase dates occur on June 30, 2024 and December 31, 2024 "
+            "during each semiannual cycle."
+        ),
+        source_id="0103",
+        filing_type="DEF 14A",
+        filing_date=date(2024, 4, 1),
+    )
+    hint = extract_espp_hints(document)
+
+    artifacts = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=[document],
+        hints=[hint],
+        reviews=pd.DataFrame(),
+        config=Phase3CandidateConfig(enabled=True),
+    )
+
+    assert len(artifacts.review_queue) == 2
+    assert artifacts.review_queue["quality_category"].eq("plausible_recurring_purchase_schedule").all()
+    assert set(artifacts.review_queue["review_priority_tier"]) <= {"Tier2", "Tier3"}
+    assert artifacts.excluded_queue.empty
 
 
 def test_phase3_review_loader_and_corrected_date_propagation(tmp_path: Path) -> None:
@@ -301,7 +378,12 @@ def test_run_phase3_batch_writes_review_queue_and_separate_provisional_outputs(t
     assert status.loc[0, "provisional_event_windows"] == 2
     assert len(raw_candidates) == 2
     assert len(review_queue) == 2
+    assert review_queue["review_priority_tier"].isin(["Tier1", "Tier2", "Tier3"]).all()
     assert set(audit["review_status"]) == {"unreviewed"}
     assert audit["included_in_event_study"].tolist() == [False, False]
     assert sorted(provisional_windows["event_date"].astype(str).unique().tolist()) == ["2024-06-30", "2024-12-31"]
     assert not (output_dir / "all_event_windows.csv").exists()
+    assert not (output_dir / "excluded_candidate_audit.csv").exists()
+    assert (output_dir / "candidate_quality_before_after.csv").exists()
+    assert (output_dir / "candidate_quality_counts.csv").exists()
+    assert (output_dir / "reports" / "candidate_quality_audit.md").exists()

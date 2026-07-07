@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.analysis.event_study import run_event_study
+from src.analysis.phase3_candidate_quality import write_phase3_candidate_quality_reports
 from src.analysis.phase2_summary import write_phase2_summary_reports
 from src.data.price_loader import PriceDataProvider, build_price_loader
 from src.events.espp_event_extractor import ESPPEvent, estimate_event_dates_with_audit
@@ -39,6 +40,7 @@ FILING_SCREENING_FILE_NAME = "filing_screening_results.csv"
 ACQUISITION_METRICS_FILE_NAME = "sec_acquisition_metrics.csv"
 RAW_CANDIDATE_FILE_NAME = "raw_candidate_extractions.csv"
 REVIEW_QUEUE_FILE_NAME = "candidate_review_queue.csv"
+EXCLUDED_QUEUE_FILE_NAME = "excluded_candidate_audit.csv"
 PROVISIONAL_AUDIT_FILE_NAME = "provisional_diagnostic_candidate_audit.csv"
 PROVISIONAL_WINDOWS_FILE_NAME = "provisional_diagnostic_event_windows.csv"
 SUCCESSFUL_RESUME_STATUSES = {
@@ -59,7 +61,9 @@ class CompanyRunArtifacts:
     screening_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     acquisition_metrics_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     raw_candidate_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
+    pre_refinement_review_queue_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     review_queue_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
+    excluded_queue_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     provisional_audit_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
     provisional_panel_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
 
@@ -488,7 +492,9 @@ def _process_phase3_company(
             screening_frame=acquired.screening_frame,
             acquisition_metrics_frame=acquisition_metrics_frame,
             raw_candidate_frame=phase3_artifacts.raw_candidates,
+            pre_refinement_review_queue_frame=phase3_artifacts.pre_refinement_review_queue,
             review_queue_frame=phase3_artifacts.review_queue,
+            excluded_queue_frame=phase3_artifacts.excluded_queue,
             provisional_audit_frame=phase3_artifacts.provisional_audit,
             provisional_panel_frame=provisional_panel,
         )
@@ -635,6 +641,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     acquisition_metrics_path = config.output_dir / ACQUISITION_METRICS_FILE_NAME
     raw_candidates_path = config.output_dir / RAW_CANDIDATE_FILE_NAME
     review_queue_path = config.output_dir / REVIEW_QUEUE_FILE_NAME
+    excluded_queue_path = config.output_dir / EXCLUDED_QUEUE_FILE_NAME
     provisional_audit_path = config.output_dir / PROVISIONAL_AUDIT_FILE_NAME
     provisional_windows_path = config.output_dir / PROVISIONAL_WINDOWS_FILE_NAME
 
@@ -646,6 +653,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     existing_acquisition_metrics = _read_existing_frame(acquisition_metrics_path) if config.resume_mode and not force else pd.DataFrame()
     existing_raw_candidates = _read_existing_frame(raw_candidates_path) if config.phase3.enabled and config.resume_mode and not force else pd.DataFrame()
     existing_review_queue = _read_existing_frame(review_queue_path) if config.phase3.enabled and config.resume_mode and not force else pd.DataFrame()
+    existing_excluded_queue = _read_existing_frame(excluded_queue_path) if config.phase3.enabled and config.resume_mode and not force else pd.DataFrame()
     existing_provisional_audit = _read_existing_frame(provisional_audit_path) if config.phase3.enabled and config.resume_mode and not force else pd.DataFrame()
     existing_provisional_windows = _read_existing_frame(provisional_windows_path) if config.phase3.enabled and config.resume_mode and not force else pd.DataFrame()
     existing_status_lookup = (
@@ -662,6 +670,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     combined_acquisition_metrics = existing_acquisition_metrics.copy()
     combined_raw_candidates = existing_raw_candidates.copy()
     combined_review_queue = existing_review_queue.copy()
+    combined_excluded_queue = existing_excluded_queue.copy()
     combined_provisional_audit = existing_provisional_audit.copy()
     combined_provisional_windows = existing_provisional_windows.copy()
     selected_tickers = set(selected_universe["ticker"].tolist())
@@ -672,6 +681,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     combined_acquisition_metrics = _filter_existing_frame_to_selected_tickers(combined_acquisition_metrics, selected_tickers)
     combined_raw_candidates = _filter_existing_frame_to_selected_tickers(combined_raw_candidates, selected_tickers)
     combined_review_queue = _filter_existing_frame_to_selected_tickers(combined_review_queue, selected_tickers)
+    combined_excluded_queue = _filter_existing_frame_to_selected_tickers(combined_excluded_queue, selected_tickers)
     combined_provisional_audit = _filter_existing_frame_to_selected_tickers(combined_provisional_audit, selected_tickers)
     combined_provisional_windows = _filter_existing_frame_to_selected_tickers(combined_provisional_windows, selected_tickers)
 
@@ -692,6 +702,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
             combined_acquisition_metrics = _upsert_company_frame(combined_acquisition_metrics, pd.DataFrame(), ticker)
             combined_raw_candidates = _upsert_company_frame(combined_raw_candidates, pd.DataFrame(), ticker)
             combined_review_queue = _upsert_company_frame(combined_review_queue, pd.DataFrame(), ticker)
+            combined_excluded_queue = _upsert_company_frame(combined_excluded_queue, pd.DataFrame(), ticker)
             combined_provisional_audit = _upsert_company_frame(combined_provisional_audit, pd.DataFrame(), ticker)
             combined_provisional_windows = _upsert_company_frame(combined_provisional_windows, pd.DataFrame(), ticker)
             continue
@@ -719,6 +730,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
         )
         combined_raw_candidates = _upsert_company_frame(combined_raw_candidates, artifacts.raw_candidate_frame, ticker)
         combined_review_queue = _upsert_company_frame(combined_review_queue, artifacts.review_queue_frame, ticker)
+        combined_excluded_queue = _upsert_company_frame(combined_excluded_queue, artifacts.excluded_queue_frame, ticker)
         combined_provisional_audit = _upsert_company_frame(
             combined_provisional_audit,
             artifacts.provisional_audit_frame,
@@ -742,8 +754,16 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     _write_optional_frame(acquisition_metrics_path, combined_acquisition_metrics)
     _write_optional_frame(raw_candidates_path, combined_raw_candidates)
     _write_optional_frame(review_queue_path, combined_review_queue)
+    _write_optional_frame(excluded_queue_path, combined_excluded_queue)
     _write_optional_frame(provisional_audit_path, combined_provisional_audit)
     _write_optional_frame(provisional_windows_path, combined_provisional_windows)
+    if config.phase3.enabled:
+        write_phase3_candidate_quality_reports(
+            config.output_dir,
+            pd.concat([combined_review_queue, combined_excluded_queue], ignore_index=True),
+            combined_review_queue,
+            combined_excluded_queue,
+        )
     report_path = write_phase2_summary_reports(
         config.output_dir,
         selected_universe,
