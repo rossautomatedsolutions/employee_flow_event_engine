@@ -274,6 +274,14 @@ def _empty_review_frame() -> pd.DataFrame:
     )
 
 
+def _is_valid_iso_date(value: str) -> bool:
+    try:
+        date.fromisoformat(str(value))
+    except ValueError:
+        return False
+    return True
+
+
 def load_phase3_candidate_reviews(review_file: Path | None) -> pd.DataFrame:
     if review_file is None or not review_file.exists():
         return _empty_review_frame()
@@ -325,10 +333,36 @@ def load_phase3_candidate_reviews(review_file: Path | None) -> pd.DataFrame:
         corrected_without_date = reviews[(reviews["review_status"] == "corrected") & (reviews["corrected_event_date"] == "")]
         if not corrected_without_date.empty:
             raise ValueError("Corrected review rows require corrected_event_date")
+        corrected_with_invalid_date = reviews[
+            (reviews["review_status"] == "corrected")
+            & (~reviews["corrected_event_date"].map(_is_valid_iso_date))
+        ]
+        if not corrected_with_invalid_date.empty:
+            raise ValueError("Corrected review rows require corrected_event_date in YYYY-MM-DD format")
+        accepted_with_corrected_date = reviews[
+            (reviews["review_status"] == "accepted")
+            & (reviews["corrected_event_date"] != "")
+        ]
+        if not accepted_with_corrected_date.empty:
+            raise ValueError("Accepted review rows must leave corrected_event_date blank and use the candidate date")
+        noncorrected_with_corrected_date = reviews[
+            (reviews["review_status"].isin(["rejected", "unreviewed"]))
+            & (reviews["corrected_event_date"] != "")
+        ]
+        if not noncorrected_with_corrected_date.empty:
+            raise ValueError("Rejected and unreviewed review rows must leave corrected_event_date blank")
         duplicated_ids = reviews[(reviews["event_review_id"] != "")].duplicated(subset=["event_review_id"], keep=False)
         if duplicated_ids.any():
             duplicates = reviews.loc[(reviews["event_review_id"] != "") & duplicated_ids, ["event_review_id"]].drop_duplicates().to_dict("records")
             raise ValueError(f"Duplicate review rows found for event_review_id keys: {duplicates}")
+        fallback_rows = reviews[reviews["event_review_id"] == ""].copy()
+        duplicated_fallbacks = fallback_rows.duplicated(subset=["ticker", "original_assigned_event_date"], keep=False)
+        if duplicated_fallbacks.any():
+            duplicates = fallback_rows.loc[
+                duplicated_fallbacks,
+                ["ticker", "original_assigned_event_date"],
+            ].drop_duplicates().to_dict("records")
+            raise ValueError(f"Duplicate review rows found for ticker + original_assigned_event_date keys: {duplicates}")
 
     return reviews.loc[:, list(_empty_review_frame().columns)].copy()
 

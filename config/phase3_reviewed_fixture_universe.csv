@@ -1,0 +1,2 @@
+ticker,company_name,issuer_name,issuer_id,cik,gics_sector,gics_sub_industry,primary_ticker,is_primary_share_class
+TST,TestCo Inc.,TestCo Inc.,testco-inc,1234567890,Information Technology,Application Software,TST,true

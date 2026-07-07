@@ -28,6 +28,7 @@ src/
     event_study.py
     metrics.py
     phase2_summary.py
+    phase3_review_packet.py
     research_summary.py
     strategy.py
   data/
@@ -49,7 +50,9 @@ config/
   example.yaml
   phase2_example.yaml
   phase3_live_sec_pilot_cache_only.yaml
+  phase3_live_sec_pilot_cache_only_reviewed.yaml
   phase3_live_sec_pilot_cache_only_diagnostic.yaml
+  phase3_reviewed_fixture.yaml
   sp500_universe_2026-07-04.csv
 fixtures/
   prices/
@@ -126,7 +129,40 @@ The Phase 3A cache-only pilot keeps the same bounded five-company scope and adds
 - bounded context extraction around ESPP-relevant text rather than whole-filing month/day scans in the primary path
 - raw candidate preservation plus a deduplicated manual review queue
 - default exclusion of unreviewed live candidates from validated research windows
+- a reviewer-facing CSV packet, Markdown packet, editable decisions template, and workflow instructions
 - an optional diagnostic-only provisional-window rerun through [`config/phase3_live_sec_pilot_cache_only_diagnostic.yaml`](config/phase3_live_sec_pilot_cache_only_diagnostic.yaml)
+
+### Phase 3A.2 reviewed manual-review pilot
+
+1. Generate the five-company cache-only packet:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only.yaml --force
+```
+
+2. Open [`artifacts/phase3_live_sec_pilot_cache_only/reports/candidate_review_packet.md`](artifacts/phase3_live_sec_pilot_cache_only/reports/candidate_review_packet.md) and inspect each retained candidate.
+3. Record reviewer decisions in [`artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv) without changing `event_review_id`.
+4. Rerun the reviewed cache-only pilot:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only_reviewed.yaml --force
+```
+
+That reviewed path:
+
+- loads decisions by stable `event_review_id`
+- keeps missing decisions as `unreviewed`
+- generates validated event windows only for `accepted` and `corrected`
+- uses `corrected_event_date` for corrected candidates
+- excludes `rejected` and `unreviewed` from validated windows
+- keeps all decisions visible in `espp_date_audit.csv`
+- does not enable provisional diagnostic windows
+
+For a fully deterministic offline replay of the reviewed workflow, run:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_reviewed_fixture.yaml --force
+```
 
 Research v0.1 includes two offline replay configs:
 
@@ -248,6 +284,7 @@ Review statuses:
 - `accepted`: keep the original assigned event date
 - `corrected`: replace the event date used downstream with `reviewed_event_date`
 - `rejected`: exclude the event from downstream event-study windows
+- `unreviewed`: keep the candidate in the audit trail but exclude it from validated event-study windows
 
 Phase 3 review queues also include reviewer-facing editable columns:
 
@@ -258,6 +295,7 @@ Phase 3 review queues also include reviewer-facing editable columns:
 - `reviewer_id`
 
 If a Phase 3 review queue is supplied back to the pipeline with blank review fields, those rows remain `unreviewed` and therefore ineligible for validated research outputs.
+`accepted`, `rejected`, and `unreviewed` rows must leave `corrected_event_date` blank. `corrected` rows must supply a valid `YYYY-MM-DD` replacement date.
 
 Example:
 

@@ -1,0 +1,45 @@
+# Deterministic offline Phase 3A.2 reviewed-workflow fixture.
+benchmark: SPY
+universe_file: "config/phase3_reviewed_fixture_universe.csv"
+ticker_subset:
+  - TST
+start_date: "2024-03-28"
+end_date: "2024-12-31"
+output_dir: "artifacts/phase3_reviewed_fixture"
+cache_dir: "artifacts/phase3_reviewed_fixture_cache"
+resume_mode: false
+offline_mode: true
+max_companies: 1
+
+price_source: csv
+price_data_path: "fixtures/prices/phase3_reviewed_fixture_prices.csv"
+
+filings:
+  source: fixture
+  fixture_dir: "fixtures/sec_filings/phase3_reviewed_fixture"
+  forms:
+    - 10-K
+    - DEF 14A
+  filing_start_date: "2024-01-01"
+  filing_end_date: "2024-12-31"
+  max_filings_per_issuer: 4
+  cache_only: false
+  request_delay_seconds: 0.2
+  max_retries: 0
+  timeout_seconds: 30
+
+reviews:
+  review_file: "config/phase3_reviewed_fixture_decisions.csv"
+
+phase3:
+  enabled: true
+  screened_only: true
+  diagnostic_extract_from_unscreened_filings: false
+  context_window_chars: 180
+  require_review_for_validated_windows: true
+  generate_provisional_unreviewed_windows: false
+
+event_study:
+  window_before: 0
+  window_after: 0
+  volume_lookback: 5

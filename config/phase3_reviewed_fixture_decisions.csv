@@ -1,0 +1,5 @@
+event_review_id,ticker,issuer_name,candidate_event_date,original_assigned_event_date,review_status,corrected_event_date,reviewer_note,reviewed_at,reviewer_id
+TST|specific_purchase|2024-03-29,TST,TestCo Inc.,2024-03-29,2024-03-29,accepted,,Accepted fixture candidate,2026-07-06T00:00:00Z,fixture-reviewer
+TST|specific_purchase|2024-06-28,TST,TestCo Inc.,2024-06-28,2024-06-28,corrected,2024-06-27,Corrected fixture candidate,2026-07-06T00:00:00Z,fixture-reviewer
+TST|specific_purchase|2024-09-30,TST,TestCo Inc.,2024-09-30,2024-09-30,rejected,,Rejected fixture candidate,2026-07-06T00:00:00Z,fixture-reviewer
+TST|specific_purchase|2024-12-31,TST,TestCo Inc.,2024-12-31,2024-12-31,unreviewed,,Intentionally left unreviewed,2026-07-06T00:00:00Z,fixture-reviewer

@@ -10,6 +10,7 @@ import pandas as pd
 
 from src.analysis.event_study import run_event_study
 from src.analysis.phase3_candidate_quality import write_phase3_candidate_quality_reports
+from src.analysis.phase3_review_packet import write_phase3_review_packet_artifacts
 from src.analysis.phase2_summary import write_phase2_summary_reports
 from src.data.price_loader import PriceDataProvider, build_price_loader
 from src.events.espp_event_extractor import ESPPEvent, estimate_event_dates_with_audit
@@ -764,6 +765,7 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
             combined_review_queue,
             combined_excluded_queue,
         )
+        write_phase3_review_packet_artifacts(config.output_dir, combined_review_queue)
     report_path = write_phase2_summary_reports(
         config.output_dir,
         selected_universe,

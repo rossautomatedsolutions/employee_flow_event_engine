@@ -1,0 +1,44 @@
+- ticker: TST
+  filing_type: 10-K
+  filing_date: "2024-02-15"
+  source_id: tst_fixture_001
+  accession_number: tst_fixture_001
+  report_date: "2023-12-31"
+  issuer_name: TestCo Inc.
+  issuer_id: testco-inc
+  cik: "1234567890"
+  text: |
+    The Employee Stock Purchase Plan purchase date is March 29, 2024 for the spring offering period.
+- ticker: TST
+  filing_type: DEF 14A
+  filing_date: "2024-04-15"
+  source_id: tst_fixture_002
+  accession_number: tst_fixture_002
+  report_date: "2024-03-31"
+  issuer_name: TestCo Inc.
+  issuer_id: testco-inc
+  cik: "1234567890"
+  text: |
+    The Employee Stock Purchase Plan purchase date is June 28, 2024 for the summer offering period.
+- ticker: TST
+  filing_type: 10-K
+  filing_date: "2024-08-01"
+  source_id: tst_fixture_003
+  accession_number: tst_fixture_003
+  report_date: "2024-06-30"
+  issuer_name: TestCo Inc.
+  issuer_id: testco-inc
+  cik: "1234567890"
+  text: |
+    The Employee Stock Purchase Plan purchase date is September 30, 2024 for the autumn offering period.
+- ticker: TST
+  filing_type: DEF 14A
+  filing_date: "2024-10-15"
+  source_id: tst_fixture_004
+  accession_number: tst_fixture_004
+  report_date: "2024-09-30"
+  issuer_name: TestCo Inc.
+  issuer_id: testco-inc
+  cik: "1234567890"
+  text: |
+    The Employee Stock Purchase Plan purchase date is December 31, 2024 for the winter offering period.
