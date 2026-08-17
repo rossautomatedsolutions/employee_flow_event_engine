@@ -4,101 +4,99 @@ Last updated: 2026-08-17
 
 ## Current State
 
-- The repository now has a formal Phase 3 SEC-derived ESPP event policy implemented in code, tests, and live artifacts.
-- The 12 retained live SEC candidates in `artifacts/phase3_live_sec_pilot_cache_only/` now auto-resolve with zero owner-review rows.
-- Final live consensus counts are 3 `accepted`, 4 `rejected`, 3 `unresolved`, and 2 `future_scheduled`.
-- The latest reviewed live output is `artifacts/phase3_live_sec_pilot_cache_only_consensus_reviewed/`.
-- That reviewed live output produces 1 validated historical event window: `MSFT` on `2024-06-30`.
-- Owner row-by-row adjudication is no longer required for the Phase 3 live pilot.
+- The five-company live SEC pilot validated the workflow for bounded SEC retrieval, durable caching, candidate extraction, conservative event adjudication, reviewed reruns, and event-study gating.
+- The 33-issuer sector-balanced discovery sample served as the terminal empirical viability test for the current SEC-only executed-event methodology.
+- That discovery closeout is now complete and reproducible from tracked configs plus the local SEC cache/artifact bundle in this workspace.
+- No mandatory work remains for the current SEC-only research phase.
 
-## Completed In This Batch
+## Final Research Result
 
-- Defined and documented the explicit event-adjudication policy in `PHASE3_EVENT_POLICY.md`.
-- Added Phase 3 review states `unresolved` and `future_scheduled` across loading, validation, eligibility handling, summaries, and company status counts.
-- Tightened SEC snippet classification so recurring purchase-date definitions and purchase-period-boundary language are not misclassified as observed historical purchases.
-- Updated dual-review consensus logic so matching `unresolved` and `future_scheduled` decisions auto-resolve instead of surfacing as manual owner work.
-- Fixed `resume_mode` restoration so persisted `unresolved_events` and `future_scheduled_events` counts survive resumable reruns.
-- Removed reviewer-facing packet and consensus workflow artifacts from reviewed output directories that already consume an applied review file.
-- Allowed cache-only SEC reruns to replay from local artifacts without requiring a user-agent override, while still requiring a real SEC user agent for live network acquisition.
-- Regenerated live review artifacts and reran both:
-  - `config/phase3_live_sec_pilot_cache_only.yaml`
-  - `config/phase3_live_sec_pilot_cache_only_consensus_reviewed.yaml`
-- Hardened reruns so review files with the correct stable candidate IDs no longer fail only because rows were sorted differently.
-- Added regression tests for the review-file canonicalization behavior.
+The current SEC-only executed-event methodology is too sparse for the intended historical event study in the bounded discovery sample.
 
-## Live Review Status
+Bounded discovery closeout on 2026-08-17:
 
-Authoritative live-review inputs and outputs:
+- Sample: 33 issuers from the current-membership S&P 500 sector-balanced discovery set
+- Selected filings after safety cap: 197
+- Raw candidates: 791
+- Retained review candidates: 11
+- Accepted historical events: 0
+- Rejected: 7
+- Unresolved: 3
+- Future scheduled: 1
+- Issuers with at least one accepted historical event: 0
 
-- `artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_a.csv`
-- `artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_b.csv`
-- `artifacts/phase3_live_sec_pilot_cache_only/review_consensus_audit.csv`
-- `artifacts/phase3_live_sec_pilot_cache_only/review_consensus_decisions.csv`
-- `artifacts/phase3_live_sec_pilot_cache_only/reports/review_consensus_summary.md`
-- `artifacts/phase3_live_sec_pilot_cache_only_consensus_reviewed/`
+Interpretation:
 
-Final 12-row dispositions:
+- This does not show that employee-flow effects do not exist.
+- This does not show that ESPP-related events have no market effect.
+- It shows that this specific conservative SEC-derived executed-event identification approach did not yield a sufficiently large validated historical event sample in the bounded 33-issuer discovery test.
 
-- `CRM|specific_purchase|2024-06-15` -> `rejected`
-- `CRM|specific_purchase|2024-12-15` -> `rejected`
-- `CRM|specific_purchase|2025-06-15` -> `rejected`
-- `CRM|specific_purchase|2025-12-15` -> `rejected`
-- `CRM|specific_purchase|2026-06-15` -> `unresolved`
-- `CRM|specific_purchase|2026-12-15` -> `future_scheduled`
-- `MSFT|specific_purchase|2023-06-30` -> `accepted`
-- `MSFT|specific_purchase|2024-06-30` -> `accepted`
-- `MSFT|specific_purchase|2025-06-30` -> `accepted`
-- `NVDA|specific_purchase|2024-08-30` -> `unresolved`
-- `NVDA|specific_purchase|2025-08-29` -> `unresolved`
-- `NVDA|specific_purchase|2026-08-31` -> `future_scheduled`
+## Completed Scope
 
-Historical event-study input after review:
+The current repository/version can be considered complete for this SEC-only research phase in the following areas:
 
-- `MSFT|specific_purchase|2024-06-30`
+- COMPLETE: pipeline implementation for offline replay, batch processing, and Phase 3 review-gated discovery
+- COMPLETE: bounded SEC retrieval, caching, throttling, retry/backoff, and cache-only replay
+- COMPLETE: candidate extraction, candidate-quality refinement, and audit preservation
+- COMPLETE: formal Phase 3 event policy and review-state handling
+- COMPLETE: dual-review / consensus-reviewed live pilot workflow
+- COMPLETE: agent-reviewed discovery closeout workflow
+- COMPLETE: reproducible cache-only rerun of the final reviewed discovery result
+- COMPLETE: bounded empirical viability testing of the SEC-only executed-event methodology
+- COMPLETE: research conclusion for the methodology actually tested
 
-Accepted but outside the configured event-study date window `2024-06-28` through `2025-01-03`:
+## Reproducibility / Validation
 
-- `MSFT|specific_purchase|2023-06-30`
-- `MSFT|specific_purchase|2025-06-30`
+Tracked closeout inputs:
 
-## Current Test Status
+- `config/phase3_sec_discovery_sector33_20260817.yaml`
+- `config/phase3_sec_discovery_sector33_20260817.source.md`
+- `config/phase3_sec_discovery_sector33_20260817_bkr_recovery.yaml`
+- `config/phase3_sec_discovery_sector33_20260817_review_decisions.csv`
+- `config/phase3_sec_discovery_sector33_20260817_final_reviewed_cache_only.yaml`
 
-- `python -m pytest -q`
-  Result on 2026-08-17: `98 passed in 19.79s`
-- Reproduced cache-only live pilot outputs on 2026-08-17 by rerunning:
-  - `python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only.yaml --force`
-  - `python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only_consensus_reviewed.yaml --force`
+Authoritative local closeout artifacts in this workspace:
+
+- `artifacts/phase3_sec_discovery_sector33_20260817/`
+- `artifacts/phase3_sec_discovery_sector33_20260817_bkr_refetch/`
+- `artifacts/phase3_sec_discovery_sector33_20260817_agent_reviewed/`
+
+Those artifact directories remain gitignored by design; the tracked repository
+preserves the closeout methodology, rerun configs, and review decisions, while
+the current workspace preserves the local SEC cache and reproduced outputs.
+
+Closeout-specific findings:
+
+- The initial live discovery run completed all 33 issuers but left one selected filing timed out: `BKR DEF 14A 0001193125-25-067674`.
+- A narrow `BKR` recovery rerun on 2026-08-17 completed the missing selected filing and did not add candidate evidence.
+- The final cache-only reviewed rerun completed with 33 processed issuers, 0 failures, and 0 warnings.
 
 ## Research Validity / Caveats
 
-- Historical event-study inclusion now requires affirmative evidence that the ESPP purchase or exercise actually occurred on the candidate date.
-- Recurring plan rules, purchase-period end dates, projected capacity language, and future schedule references remain visible in audit artifacts but do not generate validated windows.
-- `MSFT` remains the strongest live evidence because the filings explicitly state purchase rights were exercised on the named dates.
-- The bounded five-company SEC pilot is still a workflow-validation slice, not a full-universe production dataset.
-- The universe snapshot remains current-membership based, so survivorship and index-selection bias still apply.
+- The universe remains a dated current-membership S&P 500 snapshot rather than a historical point-in-time constituent set.
+- The repo remains Research v0.1 infrastructure rather than a production-grade ESPP event-mastering system.
+- The negative viability result is about sample sufficiency for this methodology, not about the nonexistence of employee-related price effects.
+
+## Optional Future Research
+
+These are optional follow-ons, not blockers to current closeout:
+
+- improve heuristics around plan-effective, purchase-period-start, and purchase-period-end language
+- target filing forms or issuer populations more likely to contain explicit executed-event wording
+- broaden or redesign the bounded universe sample
+- obtain point-in-time index membership to reduce survivorship bias
+- investigate alternate employee-flow observables
+- investigate non-SEC data sources for event identification
+- revisit unresolved rows only if stronger execution evidence becomes available
 
 ## Definition Of Done
 
-Closeout-ready state for this repository now means:
+For the SEC-only research phase currently in scope, done means:
 
-- the live Phase 3 candidate set is governed by explicit policy rather than owner row-by-row interpretation
-- reviewed reruns complete reproducibly
-- tests cover the live review states and rerun behavior
-- docs, summaries, and artifacts agree on the final reviewed event set
+- the live pilot workflow is policy-governed and reproducible
+- the bounded discovery sample has been executed and reviewed
+- the final empirical viability result is explicit
+- code, docs, configs, and final artifacts agree on that result
+- optional future ideas are separated from blockers
 
-Those conditions are now met for the current bounded pilot.
-
-## Next Action
-
-No mandatory autonomous closeout work remains in the bounded pilot.
-
-Owner/final validation can focus on:
-
-- confirming the formal policy in `PHASE3_EVENT_POLICY.md`
-- inspecting the reviewed live artifacts in `artifacts/phase3_live_sec_pilot_cache_only_consensus_reviewed/`
-
-Optional future research after owner validation:
-
-- expand beyond the five-company pilot
-- revisit broader filing coverage or point-in-time universe construction
-- test whether additional evidence classes can safely upgrade some `unresolved` rows without relaxing the conservative policy
+Those conditions are now met.

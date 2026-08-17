@@ -197,6 +197,26 @@ That discovery config is intentionally different from the reviewed five-company 
 - it disables event-study window generation (`event_study.enabled: false`) so the run can answer the validated-event viability gate before requiring broader ticker price coverage
 - it should be labeled as a current-membership discovery sample, not as a historical point-in-time S&P 500 study
 
+Terminal closeout result on 2026-08-17:
+
+- 33 issuers and 197 selected filings produced 791 raw candidates and 11 retained review candidates
+- the final reviewed discovery result produced 0 accepted historical events, 7 rejected, 3 unresolved, and 1 `future_scheduled`
+- therefore this conservative SEC-only executed-event methodology did not yield a sufficiently large validated historical sample to justify broader price/event-study coverage
+
+That is a methodology conclusion, not a claim that employee-flow effects do not exist or that ESPP-related market effects cannot matter.
+
+Tracked closeout reproduction inputs:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817.yaml --force
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_bkr_recovery.yaml --force
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_final_reviewed_cache_only.yaml --force
+```
+
+The second command is only needed if the initial live discovery run leaves the March 31, 2025 `BKR` proxy filing unretrieved. The final cache-only reviewed config consumes the tracked review decisions in [`config/phase3_sec_discovery_sector33_20260817_review_decisions.csv`](config/phase3_sec_discovery_sector33_20260817_review_decisions.csv).
+
+That final cache-only rerun reproduces the terminal reviewed result from the local SEC cache created by the live discovery workflow; the cache and generated artifact directories remain workspace-local under `artifacts/`.
+
 Research v0.1 includes two offline replay configs:
 
 - [`config/example.yaml`](config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
@@ -555,13 +575,17 @@ Validated versus provisional outputs are intentionally separated:
 - The offline CSV price fixture is only a small research replay sample; it is not a complete market-history source.
 - The legacy `yfinance` path remains available for exploratory use, but it is not part of the fully offline replay path.
 
-## TODOs (ESPP date accuracy)
+## Optional Future Research
+
+These are not blockers to the current SEC-only closeout:
 
 1. Replace keyword/date heuristics with parser logic that captures plan-specific date fields from full filing sections.
 2. Expand the SEC EDGAR adapter with richer filing metadata (`accepted_datetime`, exhibit inventory, submission text fallback).
 3. Cross-reference extracted candidate dates with company fiscal calendars to reduce false positives.
 4. Introduce confidence calibration and event-quality filters before running event studies.
 5. Expand the local human-review override workflow beyond the current CSV-based review file when research needs more nuanced curation.
+6. Target forms, issuers, or alternative data sources more likely to contain explicit executed-event wording.
+7. Revisit broader universe design, including point-in-time index membership, only as a future methodology extension.
 
 ## Extensibility points
 

@@ -1,0 +1,12 @@
+event_review_id,ticker,issuer_name,candidate_event_date,original_assigned_event_date,review_status,corrected_event_date,reviewer_note,reviewed_at,reviewer_id
+A|specific_purchase|2020-05-01,A,Agilent Technologies,2020-05-01,2020-05-01,rejected,,Plan effective date language does not establish an observed ESPP purchase event.,2026-08-17T21:32:00Z,agent_policy_review
+AEP|recurring_schedule|last business day,AEP,American Electric Power,,,unresolved,,Recurring purchase-date definition does not provide a specific observed historical purchase event.,2026-08-17T21:33:00Z,agent_policy_review
+AVB|specific_purchase|2024-07-01,AVB,AvalonBay Communities,2024-07-01,2024-07-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:34:00Z,agent_policy_review
+AVB|specific_purchase|2024-12-10,AVB,AvalonBay Communities,2024-12-10,2024-12-10,unresolved,,Purchase-period end date may bound a schedule but does not affirm execution on that date.,2026-08-17T21:35:00Z,agent_policy_review
+AVB|specific_purchase|2025-01-01,AVB,AvalonBay Communities,2025-01-01,2025-01-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:36:00Z,agent_policy_review
+AVB|specific_purchase|2025-07-01,AVB,AvalonBay Communities,2025-07-01,2025-07-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:37:00Z,agent_policy_review
+AVB|specific_purchase|2025-12-10,AVB,AvalonBay Communities,2025-12-10,2025-12-10,unresolved,,Purchase-period end date may bound a schedule but does not affirm execution on that date.,2026-08-17T21:38:00Z,agent_policy_review
+AVB|specific_purchase|2026-01-01,AVB,AvalonBay Communities,2026-01-01,2026-01-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:39:00Z,agent_policy_review
+AVB|specific_purchase|2026-07-01,AVB,AvalonBay Communities,2026-07-01,2026-07-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:40:00Z,agent_policy_review
+AVB|specific_purchase|2026-12-10,AVB,AvalonBay Communities,2026-12-10,2026-12-10,future_scheduled,,As of 2026-08-17 this purchase-period end date is still future and still lacks execution evidence.,2026-08-17T21:41:00Z,agent_policy_review
+AVB|specific_purchase|2027-01-01,AVB,AvalonBay Communities,2027-01-01,2027-01-01,rejected,,Purchase-period start date is not evidence of an observed ESPP purchase event.,2026-08-17T21:42:00Z,agent_policy_review

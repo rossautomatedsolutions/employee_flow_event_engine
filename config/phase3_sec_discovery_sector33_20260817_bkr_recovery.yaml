@@ -1,0 +1,52 @@
+# Narrow recovery rerun used during the 2026-08-17 closeout when the initial
+# 33-issuer live discovery run left one selected BKR DEF 14A filing timed out.
+# This config stays within the original bounded universe, reuses the original
+# cache root, and only retries the single issuer needed for complete selected-
+# filing retrieval coverage.
+benchmark: SPY
+universe_file: "config/sp500_universe_2026-07-04.csv"
+ticker_subset:
+  - BKR
+start_date: "2023-01-01"
+end_date: "2026-08-17"
+output_dir: "artifacts/phase3_sec_discovery_sector33_20260817_bkr_refetch"
+cache_dir: "artifacts/phase3_sec_discovery_sector33_20260817_cache"
+resume_mode: false
+offline_mode: false
+max_companies: 1
+
+price_source: csv
+price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
+
+filings:
+  source: sec
+  forms:
+    - 10-K
+    - 10-K/A
+    - DEF 14A
+  filing_start_date: "2023-01-01"
+  filing_end_date: "2026-08-17"
+  max_filings_per_issuer: 6
+  cache_only: false
+  request_delay_seconds: 1.0
+  max_retries: 3
+  timeout_seconds: 30
+
+reviews:
+  review_file: null
+
+phase3:
+  enabled: true
+  screened_only: true
+  diagnostic_extract_from_unscreened_filings: false
+  context_window_chars: 320
+  require_review_for_validated_windows: true
+  generate_provisional_unreviewed_windows: false
+  auto_policy_review: true
+  review_as_of_date: "2026-08-17"
+
+event_study:
+  enabled: false
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5

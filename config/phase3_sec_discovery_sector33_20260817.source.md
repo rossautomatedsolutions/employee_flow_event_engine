@@ -32,3 +32,29 @@ This discovery config disables event-study window generation on purpose.
 The immediate goal is to measure validated-event availability under the
 conservative Phase 3 policy before requesting broader live market-data coverage
 for tickers outside the five-company pilot fixture.
+
+## Terminal Result
+
+This discovery sample was used as the terminal viability test for the current
+SEC-only executed-event methodology on 2026-08-17.
+
+Final reviewed closeout counts:
+
+- 33 issuers attempted
+- 197 selected filings after the safety cap
+- 791 raw candidates
+- 11 retained review candidates
+- 0 accepted historical events
+- 7 rejected
+- 3 unresolved
+- 1 future_scheduled
+
+Conclusion:
+
+The bounded discovery sample did not produce a sufficiently large validated
+historical event set to justify broader price/event-study coverage for this
+specific SEC-derived executed-event identification approach.
+
+This is a negative viability result for the methodology, not a claim that
+employee-flow effects do not exist or that ESPP-related market effects are
+impossible.

@@ -1,0 +1,83 @@
+# Final authoritative cache-only rerun for the 2026-08-17 discovery closeout.
+# Uses the full 33-issuer bounded sample, the recovered SEC cache, and the
+# tracked review decisions below to reproduce the terminal viability result
+# without making new SEC requests.
+benchmark: SPY
+universe_file: "config/sp500_universe_2026-07-04.csv"
+ticker_subset:
+  - CHTR
+  - CMCSA
+  - DIS
+  - ABNB
+  - AMZN
+  - APTV
+  - ADM
+  - BF.B
+  - BG
+  - APA
+  - BKR
+  - COP
+  - ACGL
+  - AFL
+  - AIG
+  - A
+  - ABBV
+  - ABT
+  - ADP
+  - ALLE
+  - AME
+  - AAPL
+  - ACN
+  - ADBE
+  - ALB
+  - AMCR
+  - APD
+  - AMT
+  - ARE
+  - AVB
+  - AEE
+  - AEP
+  - AES
+start_date: "2023-01-01"
+end_date: "2026-08-17"
+output_dir: "artifacts/phase3_sec_discovery_sector33_20260817_agent_reviewed"
+cache_dir: "artifacts/phase3_sec_discovery_sector33_20260817_cache"
+resume_mode: false
+offline_mode: false
+max_companies: 33
+
+price_source: csv
+price_data_path: "fixtures/prices/phase2_research_sample_prices.csv"
+
+filings:
+  source: sec
+  forms:
+    - 10-K
+    - 10-K/A
+    - DEF 14A
+  filing_start_date: "2023-01-01"
+  filing_end_date: "2026-08-17"
+  max_filings_per_issuer: 6
+  cache_only: true
+  request_delay_seconds: 1.0
+  max_retries: 3
+  timeout_seconds: 30
+
+reviews:
+  review_file: "config/phase3_sec_discovery_sector33_20260817_review_decisions.csv"
+
+phase3:
+  enabled: true
+  screened_only: true
+  diagnostic_extract_from_unscreened_filings: false
+  context_window_chars: 320
+  require_review_for_validated_windows: true
+  generate_provisional_unreviewed_windows: false
+  auto_policy_review: true
+  review_as_of_date: "2026-08-17"
+
+event_study:
+  enabled: false
+  window_before: 1
+  window_after: 1
+  volume_lookback: 5
