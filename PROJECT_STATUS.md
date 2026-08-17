@@ -6,7 +6,7 @@ Last updated: 2026-08-17
 
 - The five-company live SEC pilot validated the workflow for bounded SEC retrieval, durable caching, candidate extraction, conservative event adjudication, reviewed reruns, and event-study gating.
 - The 33-issuer sector-balanced discovery sample served as the terminal empirical viability test for the current SEC-only executed-event methodology.
-- That discovery closeout is now complete and reproducible from tracked configs plus the local SEC cache/artifact bundle in this workspace.
+- That discovery closeout is now complete and reproducible from tracked configs plus the portable SEC evidence bundle committed under `reproducibility/phase3_sec_discovery_sector33_20260817/`.
 - No mandatory work remains for the current SEC-only research phase.
 
 ## Final Research Result
@@ -54,22 +54,23 @@ Tracked closeout inputs:
 - `config/phase3_sec_discovery_sector33_20260817_bkr_recovery.yaml`
 - `config/phase3_sec_discovery_sector33_20260817_review_decisions.csv`
 - `config/phase3_sec_discovery_sector33_20260817_final_reviewed_cache_only.yaml`
+- `reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache.tar.gz`
+- `reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache_manifest.json`
 
-Authoritative local closeout artifacts in this workspace:
+Generated closeout outputs remain local and reproducible after restore:
 
 - `artifacts/phase3_sec_discovery_sector33_20260817/`
 - `artifacts/phase3_sec_discovery_sector33_20260817_bkr_refetch/`
 - `artifacts/phase3_sec_discovery_sector33_20260817_agent_reviewed/`
 
-Those artifact directories remain gitignored by design; the tracked repository
-preserves the closeout methodology, rerun configs, and review decisions, while
-the current workspace preserves the local SEC cache and reproduced outputs.
+Those generated artifact directories remain gitignored by design. The tracked repository now preserves the closeout methodology, rerun configs, review decisions, and the portable SEC evidence bundle needed for cache-only replay on a fresh clone without live EDGAR access.
 
 Closeout-specific findings:
 
 - The initial live discovery run completed all 33 issuers but left one selected filing timed out: `BKR DEF 14A 0001193125-25-067674`.
 - A narrow `BKR` recovery rerun on 2026-08-17 completed the missing selected filing and did not add candidate evidence.
 - The final cache-only reviewed rerun completed with 33 processed issuers, 0 failures, and 0 warnings.
+- Fresh-clone replay now restores the tracked SEC bundle, validates the extracted hashes against the manifest, and reproduces the expected 33 / 197 / 11 / 0 / 7 / 3 / 1 closeout counts with network disabled.
 
 ## Research Validity / Caveats
 

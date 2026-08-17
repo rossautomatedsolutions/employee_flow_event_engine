@@ -97,6 +97,13 @@ That example intentionally stays bounded and deterministic:
 - it writes universe validation, per-company status, consolidated audit, and Phase 2 summary artifacts
 - it supports resumable execution through `resume_mode` and `--force`
 
+### Test reproducibility versus research reproducibility
+
+The repository now keeps those two concerns separate on purpose:
+
+- Normal software validation uses the tracked Python code, configs, fixtures, and tests only. It does not require the live-SEC cache bundle. Run `python -m pytest -q`.
+- Final research-artifact reproduction for the 33-issuer SEC closeout uses the tracked SEC evidence bundle under [`reproducibility/phase3_sec_discovery_sector33_20260817`](reproducibility/phase3_sec_discovery_sector33_20260817), then reruns the final cache-only config with no live EDGAR access.
+
 ### Phase 2B live SEC / EDGAR pilot
 
 ```bash
@@ -208,14 +215,30 @@ That is a methodology conclusion, not a claim that employee-flow effects do not 
 Tracked closeout reproduction inputs:
 
 ```bash
-python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817.yaml --force
-python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_bkr_recovery.yaml --force
-python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_final_reviewed_cache_only.yaml --force
+python scripts/restore_phase3_final_cache.py
+python scripts/verify_phase3_final_reproduction.py
 ```
 
-The second command is only needed if the initial live discovery run leaves the March 31, 2025 `BKR` proxy filing unretrieved. The final cache-only reviewed config consumes the tracked review decisions in [`config/phase3_sec_discovery_sector33_20260817_review_decisions.csv`](config/phase3_sec_discovery_sector33_20260817_review_decisions.csv).
+Those fresh-clone replay commands restore the tracked SEC evidence bundle at [`reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache.tar.gz`](reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache.tar.gz), verify the extracted files against the tracked manifest, rerun the final cache-only reviewed config, and assert the expected 33 / 197 / 11 / 0 / 7 / 3 / 1 result with network disabled.
 
-That final cache-only rerun reproduces the terminal reviewed result from the local SEC cache created by the live discovery workflow; the cache and generated artifact directories remain workspace-local under `artifacts/`.
+If a prior failed replay already created `artifacts/phase3_sec_discovery_sector33_20260817_cache`, the restore script automatically moves that existing directory to a sibling `*_pre_restore_backup` path before extracting the tracked bundle.
+
+For provenance, the tracked manifest at [`reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache_manifest.json`](reproducibility/phase3_sec_discovery_sector33_20260817/phase3_sec_discovery_sector33_20260817_sec_cache_manifest.json) records every bundled cache file, its SHA-256 hash, the selected filing inventory, and the authoritative replay inputs. The final cache-only reviewed config consumes the tracked review decisions in [`config/phase3_sec_discovery_sector33_20260817_review_decisions.csv`](config/phase3_sec_discovery_sector33_20260817_review_decisions.csv).
+
+The historical live-acquisition commands remain documented provenance for how the evidence was first collected:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817.yaml --force
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_bkr_recovery.yaml --force
+```
+
+The second historical command was only needed because the initial live discovery run left the March 31, 2025 `BKR` proxy filing unretrieved.
+
+If you prefer to run the final replay command directly after restore, use:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817_final_reviewed_cache_only.yaml --force
+```
 
 Research v0.1 includes two offline replay configs:
 
@@ -514,6 +537,9 @@ Source notes for the current dated snapshot live in [`config/sp500_universe_2026
 - Price inputs can come from a deterministic local CSV when `price_source: csv` is configured.
 - Filing inputs come from local YAML fixtures when configured.
 - Live SEC filing inputs can be replayed from the raw cache when `filings.cache_only: true` is configured.
+- The final 33-issuer SEC closeout now has a tracked portable evidence bundle plus manifest under [`reproducibility/phase3_sec_discovery_sector33_20260817`](reproducibility/phase3_sec_discovery_sector33_20260817), so a fresh clone can restore the exact SEC inputs without a live EDGAR rerun.
+- The tracked bundle preserves raw SEC submissions JSON, filing index JSON, primary filing documents, and `metadata.json` provenance files for the exact 197 selected filings in the final closeout.
+- Normal `pytest` validation remains independent of that SEC bundle; the bundle exists for research-artifact replay, not for ordinary software tests.
 - Event date construction follows deterministic precedence rules and writes an audit CSV for review.
 - Manual review decisions are applied deterministically from a local CSV when configured.
 - Review matching prefers deterministic `event_review_id` keys and falls back to `ticker + original_assigned_event_date` for older review rows.
