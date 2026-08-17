@@ -10,6 +10,7 @@ import pandas as pd
 
 from src.analysis.event_study import run_event_study
 from src.analysis.phase3_candidate_quality import write_phase3_candidate_quality_reports
+from src.analysis.phase3_review_consensus import write_phase3_review_consensus_artifacts
 from src.analysis.phase3_review_packet import write_phase3_review_packet_artifacts
 from src.analysis.phase2_summary import write_phase2_summary_reports
 from src.data.price_loader import PriceDataProvider, build_price_loader
@@ -44,6 +45,18 @@ REVIEW_QUEUE_FILE_NAME = "candidate_review_queue.csv"
 EXCLUDED_QUEUE_FILE_NAME = "excluded_candidate_audit.csv"
 PROVISIONAL_AUDIT_FILE_NAME = "provisional_diagnostic_candidate_audit.csv"
 PROVISIONAL_WINDOWS_FILE_NAME = "provisional_diagnostic_event_windows.csv"
+APPLIED_REVIEW_FILE_NAME = "applied_review_decisions.csv"
+PHASE3_REVIEW_WORKFLOW_ARTIFACTS = (
+    "candidate_review_packet.csv",
+    "review_decisions.csv",
+    "review_decisions_reviewer_a.csv",
+    "review_decisions_reviewer_b.csv",
+    "review_consensus_audit.csv",
+    "review_consensus_decisions.csv",
+    "reports/candidate_review_packet.md",
+    "reports/review_consensus_summary.md",
+    "reports/review_workflow_instructions.md",
+)
 SUCCESSFUL_RESUME_STATUSES = {
     "completed",
     "completed_no_espp",
@@ -149,11 +162,17 @@ def _filter_events_to_date_range(events: list[ESPPEvent], start_date: date, end_
     return [event for event in events if start_date <= event.event_date <= end_date]
 
 
-def _status_counts(reviewed_audit: pd.DataFrame) -> tuple[int, int, int]:
+def _status_counts(reviewed_audit: pd.DataFrame) -> tuple[int, int, int, int, int]:
     if reviewed_audit.empty or "review_status" not in reviewed_audit.columns:
-        return 0, 0, 0
+        return 0, 0, 0, 0, 0
     counts = reviewed_audit["review_status"].fillna("unreviewed").replace("", "unreviewed").value_counts()
-    return int(counts.get("accepted", 0)), int(counts.get("corrected", 0)), int(counts.get("rejected", 0))
+    return (
+        int(counts.get("accepted", 0)),
+        int(counts.get("corrected", 0)),
+        int(counts.get("rejected", 0)),
+        int(counts.get("unresolved", 0)),
+        int(counts.get("future_scheduled", 0)),
+    )
 
 
 def _warning_count(reviewed_audit: pd.DataFrame) -> int:
@@ -204,6 +223,8 @@ def _build_company_status(
     accepted_events: int = 0,
     corrected_events: int = 0,
     rejected_events: int = 0,
+    unresolved_events: int = 0,
+    future_scheduled_events: int = 0,
     provisional_event_windows: int = 0,
     usable_event_windows: int = 0,
     warning_count: int = 0,
@@ -227,6 +248,8 @@ def _build_company_status(
         accepted_events=accepted_events,
         corrected_events=corrected_events,
         rejected_events=rejected_events,
+        unresolved_events=unresolved_events,
+        future_scheduled_events=future_scheduled_events,
         provisional_event_windows=provisional_event_windows,
         usable_event_windows=usable_event_windows,
         warning_count=warning_count,
@@ -323,7 +346,7 @@ def _process_primary_company(
             events=events,
             config=config.event_study,
         )
-        accepted_events, corrected_events, rejected_events = _status_counts(audit_frame)
+        accepted_events, corrected_events, rejected_events, unresolved_events, future_scheduled_events = _status_counts(audit_frame)
         warnings = _warning_count(audit_frame) + acquisition_warnings
         usable_event_windows = _event_window_count(event_study.panel)
 
@@ -349,6 +372,8 @@ def _process_primary_company(
                 accepted_events=accepted_events,
                 corrected_events=corrected_events,
                 rejected_events=rejected_events,
+                unresolved_events=unresolved_events,
+                future_scheduled_events=future_scheduled_events,
                 usable_event_windows=usable_event_windows,
                 warning_count=warnings,
             ),
@@ -424,7 +449,9 @@ def _process_phase3_company(
         candidates_awaiting_review = int(
             phase3_artifacts.review_queue["review_status"].fillna("unreviewed").replace("", "unreviewed").eq("unreviewed").sum()
         ) if not phase3_artifacts.review_queue.empty else 0
-        accepted_events, corrected_events, rejected_events = _status_counts(phase3_artifacts.validated_audit)
+        accepted_events, corrected_events, rejected_events, unresolved_events, future_scheduled_events = _status_counts(
+            phase3_artifacts.validated_audit
+        )
 
         validated_events = _filter_events_to_date_range(phase3_artifacts.validated_events, config.start_date, config.end_date)
         provisional_events = _filter_events_to_date_range(phase3_artifacts.provisional_events, config.start_date, config.end_date)
@@ -483,6 +510,8 @@ def _process_phase3_company(
                 accepted_events=accepted_events,
                 corrected_events=corrected_events,
                 rejected_events=rejected_events,
+                unresolved_events=unresolved_events,
+                future_scheduled_events=future_scheduled_events,
                 provisional_event_windows=provisional_event_windows,
                 usable_event_windows=usable_event_windows,
                 warning_count=warnings,
@@ -555,6 +584,17 @@ def _write_optional_frame(path: Path, frame: pd.DataFrame) -> None:
     frame.to_csv(path, index=False)
 
 
+def _persist_applied_review_file(output_dir: Path, reviews: pd.DataFrame) -> None:
+    _write_optional_frame(output_dir / APPLIED_REVIEW_FILE_NAME, reviews)
+
+
+def _clear_phase3_review_workflow_artifacts(output_dir: Path) -> None:
+    for relative_path in PHASE3_REVIEW_WORKFLOW_ARTIFACTS:
+        artifact_path = output_dir / relative_path
+        if artifact_path.exists():
+            artifact_path.unlink()
+
+
 def _persist_universe_artifacts(output_dir: Path, loaded_universe: LoadedSP500Universe, selected_universe: pd.DataFrame) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "reports").mkdir(parents=True, exist_ok=True)
@@ -600,6 +640,8 @@ def _restore_existing_status(existing_row: dict[str, object], ticker: str) -> Co
         accepted_events=_int_value("accepted_events"),
         corrected_events=_int_value("corrected_events"),
         rejected_events=_int_value("rejected_events"),
+        unresolved_events=_int_value("unresolved_events"),
+        future_scheduled_events=_int_value("future_scheduled_events"),
         provisional_event_windows=_int_value("provisional_event_windows"),
         usable_event_windows=_int_value("usable_event_windows"),
         warning_count=_int_value("warning_count"),
@@ -759,13 +801,19 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     _write_optional_frame(provisional_audit_path, combined_provisional_audit)
     _write_optional_frame(provisional_windows_path, combined_provisional_windows)
     if config.phase3.enabled:
+        _persist_applied_review_file(config.output_dir, phase3_reviews)
+    if config.phase3.enabled:
         write_phase3_candidate_quality_reports(
             config.output_dir,
             pd.concat([combined_review_queue, combined_excluded_queue], ignore_index=True),
             combined_review_queue,
             combined_excluded_queue,
         )
-        write_phase3_review_packet_artifacts(config.output_dir, combined_review_queue)
+        if config.review_file is None:
+            write_phase3_review_packet_artifacts(config.output_dir, combined_review_queue)
+            write_phase3_review_consensus_artifacts(config.output_dir, combined_review_queue)
+        else:
+            _clear_phase3_review_workflow_artifacts(config.output_dir)
     report_path = write_phase2_summary_reports(
         config.output_dir,
         selected_universe,

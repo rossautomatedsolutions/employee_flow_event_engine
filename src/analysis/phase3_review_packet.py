@@ -161,12 +161,14 @@ def render_phase3_review_workflow_instructions() -> str:
             "1. Open `reports/candidate_review_packet.md` and inspect each retained candidate row in order.",
             "2. Use the bounded snippet, matched terms, filing form, filing date, and accession number to verify the source context.",
             "3. Enter decisions in `review_decisions.csv` without changing `event_review_id`; that stable candidate ID is the join key.",
-            "4. Allowed `review_status` values are `accepted`, `corrected`, `rejected`, and `unreviewed`.",
+            "4. Allowed `review_status` values are `accepted`, `corrected`, `rejected`, `unresolved`, `future_scheduled`, and `unreviewed`.",
             "5. Use `accepted` only when the candidate event date already reflects the supported ESPP purchase date. Leave `corrected_event_date` blank.",
             "6. Use `corrected` only when the filing clearly supports a different date, and enter that replacement date in `YYYY-MM-DD` format.",
-            "7. Use `rejected` when the text is not an ESPP purchase event. Leave `corrected_event_date` blank.",
-            "8. Leave uncertain rows as `unreviewed`. Unreviewed candidates remain visible in audit outputs but do not generate validated event windows.",
-            "9. Save `review_decisions.csv` in place, then rerun the dedicated reviewed pilot configuration.",
+            "7. Use `rejected` when the text is an administrative, plan-history, or otherwise non-purchase event reference. Leave `corrected_event_date` blank.",
+            "8. Use `unresolved` when the text points to a purchase schedule or boundary but does not affirm that the purchase actually occurred on the candidate date. Leave `corrected_event_date` blank.",
+            "9. Use `future_scheduled` when the filing establishes a future schedule as of review time but the event has not yet occurred. Leave `corrected_event_date` blank.",
+            "10. Leave rows as `unreviewed` only when review work is still incomplete. Unreviewed candidates remain visible in audit outputs but do not generate validated event windows.",
+            "11. Save `review_decisions.csv` in place, then rerun the dedicated reviewed pilot configuration.",
             "",
         ]
     )
@@ -305,18 +307,48 @@ def _write_protected_text(path: Path, content: str, *, packet_name: str) -> None
 def _write_or_preserve_decisions_template(path: Path, template: pd.DataFrame) -> None:
     if path.exists():
         existing = pd.read_csv(path, dtype=str).fillna("")
-        if "event_review_id" not in existing.columns:
-            raise ValueError(f"Existing review decisions file is missing event_review_id: {path}")
-        existing_ids = existing["event_review_id"].astype(str).str.strip().tolist()
-        expected_ids = template["event_review_id"].astype(str).str.strip().tolist()
-        if existing_ids != expected_ids:
-            raise ValueError(
-                "Existing review decisions file does not match the current stable candidate IDs; "
-                f"refusing to overwrite {path}"
-            )
+        canonical = _align_existing_review_decisions(existing, template, path=path)
+        if not _normalized_review_decision_frame(existing).equals(_normalized_review_decision_frame(canonical)):
+            canonical.to_csv(path, index=False)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     template.to_csv(path, index=False)
+
+
+def _align_existing_review_decisions(existing: pd.DataFrame, template: pd.DataFrame, *, path: Path) -> pd.DataFrame:
+    if "event_review_id" not in existing.columns:
+        raise ValueError(f"Existing review decisions file is missing event_review_id: {path}")
+
+    existing_ids = existing["event_review_id"].astype(str).str.strip()
+    expected_ids = template["event_review_id"].astype(str).str.strip()
+    if existing_ids.duplicated().any():
+        raise ValueError(f"Existing review decisions file contains duplicate event_review_id values: {path}")
+    if sorted(existing_ids.tolist()) != sorted(expected_ids.tolist()):
+        raise ValueError(
+            "Existing review decisions file does not match the current stable candidate IDs; "
+            f"refusing to overwrite {path}"
+        )
+
+    existing_by_id = existing.assign(event_review_id=existing_ids).set_index("event_review_id")
+    aligned = template.copy()
+    for column in REVIEW_DECISION_COLUMNS:
+        if column == "event_review_id" or column not in existing_by_id.columns:
+            continue
+        existing_values = existing_by_id[column].reindex(expected_ids.tolist()).fillna("").astype(str).tolist()
+        default_values = aligned[column].fillna("").astype(str).tolist()
+        aligned[column] = [
+            existing_value if existing_value != "" else default_value
+            for existing_value, default_value in zip(existing_values, default_values)
+        ]
+    return aligned.reindex(columns=REVIEW_DECISION_COLUMNS)
+
+
+def _normalized_review_decision_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = frame.copy().reindex(columns=REVIEW_DECISION_COLUMNS).fillna("")
+    for column in normalized.columns:
+        normalized[column] = normalized[column].astype(str)
+    normalized["event_review_id"] = normalized["event_review_id"].str.strip()
+    return normalized.reset_index(drop=True)
 
 
 def _string_or_empty(value: object) -> str:

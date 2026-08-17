@@ -198,6 +198,7 @@ def _write_sec_config(
     price_path: Path,
     output_dir: Path,
     include_user_agent: bool = True,
+    cache_only: bool = False,
 ) -> Path:
     config_path = tmp_path / "phase2_live_sec.yaml"
     sec_user_agent_lines = ['  sec_user_agent: "Test Company test@example.com"'] if include_user_agent else []
@@ -223,7 +224,7 @@ def _write_sec_config(
                 '    - "10-K"',
                 '    - "DEF 14A"',
                 "  max_filings_per_issuer: 2",
-                "  cache_only: false",
+                f"  cache_only: {'true' if cache_only else 'false'}",
                 "  request_delay_seconds: 0.2",
                 "  max_retries: 2",
                 "  timeout_seconds: 5",
@@ -232,6 +233,65 @@ def _write_sec_config(
                 "event_study:",
                 "  window_before: 0",
                 "  window_after: 1",
+                "  volume_lookback: 5",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _write_phase3_config(
+    tmp_path: Path,
+    universe_path: Path,
+    price_path: Path,
+    fixture_dir: Path,
+    review_path: Path | None,
+    output_dir: Path,
+    resume_mode: bool = False,
+) -> Path:
+    config_path = tmp_path / "phase3.yaml"
+    review_line = f'  review_file: "{review_path.as_posix()}"' if review_path else "  review_file: null"
+    config_path.write_text(
+        "\n".join(
+            [
+                'benchmark: "SPY"',
+                f'universe_file: "{universe_path.as_posix()}"',
+                'ticker_subset: ["AAPL"]',
+                'start_date: "2024-06-28"',
+                'end_date: "2025-01-01"',
+                f'output_dir: "{output_dir.as_posix()}"',
+                f'cache_dir: "{(tmp_path / "cache").as_posix()}"',
+                f"resume_mode: {'true' if resume_mode else 'false'}",
+                "offline_mode: true",
+                "max_companies: 1",
+                'price_source: "csv"',
+                f'price_data_path: "{price_path.as_posix()}"',
+                "filings:",
+                '  source: "fixture"',
+                f'  fixture_dir: "{fixture_dir.as_posix()}"',
+                "  forms:",
+                '    - "10-K"',
+                '    - "DEF 14A"',
+                '  filing_start_date: "2024-01-01"',
+                '  filing_end_date: "2024-12-31"',
+                "  max_filings_per_issuer: 4",
+                "  cache_only: false",
+                "  request_delay_seconds: 0.2",
+                "  max_retries: 0",
+                "  timeout_seconds: 30",
+                "reviews:",
+                review_line,
+                "phase3:",
+                "  enabled: true",
+                "  screened_only: true",
+                "  diagnostic_extract_from_unscreened_filings: false",
+                "  context_window_chars: 180",
+                "  require_review_for_validated_windows: true",
+                "  generate_provisional_unreviewed_windows: false",
+                "event_study:",
+                "  window_before: 0",
+                "  window_after: 0",
                 "  volume_lookback: 5",
             ]
         ),
@@ -332,6 +392,23 @@ def test_load_batch_config_accepts_sec_user_agent_from_environment(tmp_path: Pat
     assert config.filings.sec_user_agent == "Env Test env@example.com"
 
 
+def test_load_batch_config_allows_cache_only_sec_without_user_agent(tmp_path: Path) -> None:
+    config_path = _write_sec_config(
+        tmp_path=tmp_path,
+        universe_path=tmp_path / "universe.csv",
+        price_path=tmp_path / "prices.csv",
+        output_dir=tmp_path / "artifacts",
+        include_user_agent=False,
+        cache_only=True,
+    )
+
+    config = load_batch_config(config_path)
+
+    assert config.filings.source == "sec"
+    assert config.filings.cache_only is True
+    assert config.filings.sec_user_agent is None
+
+
 def test_run_phase2_batch_writes_status_summary_and_skips_secondary_share_class(tmp_path: Path) -> None:
     fixture_dir = _write_fixture_dir(tmp_path)
     price_path = _write_price_file(tmp_path, include_crm=True)
@@ -403,6 +480,8 @@ def test_run_phase2_batch_resume_mode_reprocesses_failed_only(tmp_path: Path, mo
                 accepted_events=1,
                 corrected_events=0,
                 rejected_events=0,
+                unresolved_events=2,
+                future_scheduled_events=1,
                 usable_event_windows=2,
                 warning_count=0,
                 processing_timestamp="2026-07-04T12:00:00+00:00",
@@ -539,6 +618,8 @@ def test_run_phase2_batch_resume_mode_reprocesses_failed_only(tmp_path: Path, mo
 
     assert calls == ["CRM"]
     assert status.loc[status["ticker"] == "AAPL", "processing_status"].iloc[0] == "completed"
+    assert status.loc[status["ticker"] == "AAPL", "unresolved_events"].iloc[0] == 2
+    assert status.loc[status["ticker"] == "AAPL", "future_scheduled_events"].iloc[0] == 1
     assert status.loc[status["ticker"] == "CRM", "processing_status"].iloc[0] == "completed"
 
 
@@ -579,3 +660,88 @@ def test_run_phase2_batch_live_sec_mode_writes_sec_artifacts(tmp_path: Path, mon
     assert inventory["processed_successfully"].tolist() == [True, True]
     assert screening["espp_mention_flag"].tolist() == [True, True]
     assert metrics.loc[0, "cache_misses_total"] == 5
+
+
+def test_run_phase2_batch_reviewed_phase3_run_clears_stale_review_workflow_artifacts(tmp_path: Path, monkeypatch) -> None:
+    fixture_dir = _write_fixture_dir(tmp_path)
+    price_path = _write_price_file(tmp_path, include_crm=False)
+    universe_path = _write_universe_file(tmp_path)
+    output_dir = tmp_path / "artifacts"
+    review_path = tmp_path / "phase3_reviews.csv"
+    review_path.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,issuer_name,candidate_event_date,original_assigned_event_date,review_status,corrected_event_date,reviewer_note,reviewed_at,reviewer_id",
+                "AAPL|specific_purchase|2024-06-30,AAPL,Apple Inc.,2024-06-30,2024-06-30,accepted,,Historical execution wording,2026-08-17T12:00:00Z,tester",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path = _write_phase3_config(tmp_path, universe_path, price_path, fixture_dir, review_path, output_dir)
+
+    output_dir.mkdir()
+    reports_dir = output_dir / "reports"
+    reports_dir.mkdir()
+    stale_paths = [
+        output_dir / "candidate_review_packet.csv",
+        output_dir / "review_decisions.csv",
+        output_dir / "review_decisions_reviewer_a.csv",
+        output_dir / "review_decisions_reviewer_b.csv",
+        output_dir / "review_consensus_audit.csv",
+        output_dir / "review_consensus_decisions.csv",
+        reports_dir / "candidate_review_packet.md",
+        reports_dir / "review_consensus_summary.md",
+        reports_dir / "review_workflow_instructions.md",
+    ]
+    for stale_path in stale_paths:
+        stale_path.write_text("stale", encoding="utf-8")
+
+    import src.pipeline.run_batch as run_batch_module
+
+    monkeypatch.setattr(run_batch_module, "write_phase3_candidate_quality_reports", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        run_batch_module,
+        "write_phase2_summary_reports",
+        lambda output_dir, *args, **kwargs: output_dir / "reports" / "phase2_research_summary.md",
+    )
+
+    def _fake_process_phase3_company(company, config, loader, benchmark_prices, reviews):
+        ticker = str(company["ticker"])
+        return run_batch_module.CompanyRunArtifacts(
+            status=CompanyProcessingStatus(
+                ticker=ticker,
+                company_name=str(company["company_name"]),
+                cik=str(company["cik"]),
+                sector=str(company["gics_sector"]),
+                sub_industry=str(company["gics_sub_industry"]),
+                issuer_id=str(company["issuer_id"]),
+                primary_ticker=str(company["primary_ticker"]),
+                is_primary_share_class=bool(company["is_primary_share_class"]),
+                processing_status="completed",
+                candidate_events_found=1,
+                accepted_events=1,
+                usable_event_windows=1,
+                processing_timestamp="2026-08-17T12:00:00+00:00",
+            ),
+            audit_frame=pd.DataFrame([{"ticker": ticker, "event_review_id": "AAPL|specific_purchase|2024-06-30"}]),
+            panel_frame=pd.DataFrame([{"ticker": ticker, "event_id": 1, "event_date": "2024-06-30", "tau": 0}]),
+            review_queue_frame=pd.DataFrame(
+                [
+                    {
+                        "ticker": ticker,
+                        "event_review_id": "AAPL|specific_purchase|2024-06-30",
+                        "candidate_event_date": "2024-06-30",
+                        "review_priority_tier": "Tier1",
+                        "quality_category": "plausible_specific_purchase_date",
+                    }
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(run_batch_module, "_process_phase3_company", _fake_process_phase3_company)
+
+    run_phase2_batch(config_path)
+
+    for stale_path in stale_paths:
+        assert not stale_path.exists()
+    assert (output_dir / "applied_review_decisions.csv").exists()

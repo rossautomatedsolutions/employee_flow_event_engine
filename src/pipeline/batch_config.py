@@ -141,7 +141,7 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
     if config.filings.timeout_seconds <= 0:
         raise ValueError("filings.timeout_seconds must be positive")
     if config.filings.source == "sec":
-        if not config.filings.sec_user_agent:
+        if not config.filings.cache_only and not config.filings.sec_user_agent:
             raise ValueError("filings.sec_user_agent or SEC_EDGAR_USER_AGENT is required when filings.source is 'sec'")
         if not config.filings.cache_only and config.filings.request_delay_seconds < 0.1:
             raise ValueError("filings.request_delay_seconds must be at least 0.1 seconds for live SEC requests")

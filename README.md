@@ -103,7 +103,7 @@ That example intentionally stays bounded and deterministic:
 python -m src.pipeline.run_batch --config config/phase2_live_sec_pilot.yaml --force
 ```
 
-Before running that command, provide a valid SEC user agent either by setting
+Before running that live-acquisition command, provide a valid SEC user agent either by setting
 `filings.sec_user_agent` in a local config override or by exporting
 `SEC_EDGAR_USER_AGENT`.
 
@@ -130,6 +130,7 @@ The Phase 3A cache-only pilot keeps the same bounded five-company scope and adds
 - raw candidate preservation plus a deduplicated manual review queue
 - default exclusion of unreviewed live candidates from validated research windows
 - a reviewer-facing CSV packet, Markdown packet, editable decisions template, and workflow instructions
+- dual-review templates (`review_decisions_reviewer_a.csv` and `review_decisions_reviewer_b.csv`), a derived `review_consensus_decisions.csv`, and a consensus summary that isolates only genuine reviewer disagreements or incomplete work for manual resolution
 - an optional diagnostic-only provisional-window rerun through [`config/phase3_live_sec_pilot_cache_only_diagnostic.yaml`](config/phase3_live_sec_pilot_cache_only_diagnostic.yaml)
 
 ### Phase 3A.2 reviewed manual-review pilot
@@ -141,8 +142,24 @@ python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_onl
 ```
 
 2. Open [`artifacts/phase3_live_sec_pilot_cache_only/reports/candidate_review_packet.md`](artifacts/phase3_live_sec_pilot_cache_only/reports/candidate_review_packet.md) and inspect each retained candidate.
-3. Record reviewer decisions in [`artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv) without changing `event_review_id`.
-4. Rerun the reviewed cache-only pilot:
+3. Prefer the dual-review path:
+   fill [`artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_a.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_a.csv) and [`artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_b.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_decisions_reviewer_b.csv) without changing `event_review_id`.
+4. Refresh the consensus artifacts:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only.yaml
+```
+
+5. Inspect [`artifacts/phase3_live_sec_pilot_cache_only/reports/review_consensus_summary.md`](artifacts/phase3_live_sec_pilot_cache_only/reports/review_consensus_summary.md) and use [`artifacts/phase3_live_sec_pilot_cache_only/review_consensus_decisions.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_consensus_decisions.csv) as the reviewed input.
+   The current formal adjudication policy for live SEC-derived Phase 3 candidates is documented in [`PHASE3_EVENT_POLICY.md`](PHASE3_EVENT_POLICY.md).
+6. Rerun the consensus-reviewed cache-only pilot:
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only_consensus_reviewed.yaml --force
+```
+
+7. Legacy single-review fallback:
+   record reviewer decisions in [`artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv`](artifacts/phase3_live_sec_pilot_cache_only/review_decisions.csv) without changing `event_review_id`, then rerun the original reviewed config:
 
 ```bash
 python -m src.pipeline.run_batch --config config/phase3_live_sec_pilot_cache_only_reviewed.yaml --force
@@ -154,8 +171,10 @@ That reviewed path:
 - keeps missing decisions as `unreviewed`
 - generates validated event windows only for `accepted` and `corrected`
 - uses `corrected_event_date` for corrected candidates
-- excludes `rejected` and `unreviewed` from validated windows
+- excludes `rejected`, `unresolved`, `future_scheduled`, and `unreviewed` from validated windows
 - keeps all decisions visible in `espp_date_audit.csv`
+- persists the applied reviewed input in `applied_review_decisions.csv` so reviewed output folders remain self-contained
+- omits reviewer-facing packet and consensus workflow artifacts inside reviewed output folders, because those remain authoritative only in the upstream review-queue output directory
 - does not enable provisional diagnostic windows
 
 For a fully deterministic offline replay of the reviewed workflow, run:
@@ -246,6 +265,8 @@ The live pilot configuration adds:
 The committed live pilot configs intentionally omit a concrete
 `filings.sec_user_agent` value so personal contact details are not stored in
 the repository.
+Cache-only reruns can replay from an existing local SEC cache without setting a
+user agent, but any live SEC network acquisition still requires one.
 
 Filing selection is deterministic and staged:
 
@@ -279,7 +300,7 @@ Required columns:
 
 `event_review_id` is a deterministic composite key written into `espp_date_audit.csv`. It is intended to be stable for the same source inputs across repeated runs and is the preferred review-matching key. The pipeline still supports `ticker + original_assigned_event_date` as a fallback for older review rows.
 
-Review statuses:
+Legacy review statuses:
 
 - `accepted`: keep the original assigned event date
 - `corrected`: replace the event date used downstream with `reviewed_event_date`
@@ -294,8 +315,17 @@ Phase 3 review queues also include reviewer-facing editable columns:
 - `reviewed_at`
 - `reviewer_id`
 
+Phase 3 review statuses:
+
+- `accepted`: the text supports an observed historical ESPP purchase event on the candidate date
+- `corrected`: the text supports an observed historical ESPP purchase event on a different explicit date
+- `rejected`: the text is an administrative, plan-history, or otherwise non-purchase-event reference
+- `unresolved`: the text points to a purchase schedule or boundary but does not affirm that the purchase actually occurred on the candidate date
+- `future_scheduled`: the text establishes a future schedule as of review time, but the event is still ineligible for historical event-study use
+- `unreviewed`: review work is still incomplete
+
 If a Phase 3 review queue is supplied back to the pipeline with blank review fields, those rows remain `unreviewed` and therefore ineligible for validated research outputs.
-`accepted`, `rejected`, and `unreviewed` rows must leave `corrected_event_date` blank. `corrected` rows must supply a valid `YYYY-MM-DD` replacement date.
+`accepted`, `rejected`, `unresolved`, `future_scheduled`, and `unreviewed` rows must leave `corrected_event_date` blank. `corrected` rows must supply a valid `YYYY-MM-DD` replacement date.
 
 Example:
 

@@ -207,10 +207,11 @@ class SecHttpClient:
 
 
 def build_sec_http_client(config: SECFilingSourceConfig) -> SecHttpClient:
-    if not config.sec_user_agent:
+    if not config.sec_user_agent and not config.cache_only:
         raise ValueError("SEC acquisition requires a non-empty user-agent string")
+    user_agent = config.sec_user_agent or "cache-only-replay"
     return SecHttpClient(
-        user_agent=config.sec_user_agent,
+        user_agent=user_agent,
         request_delay_seconds=config.request_delay_seconds,
         max_retries=config.max_retries,
         timeout_seconds=config.timeout_seconds,

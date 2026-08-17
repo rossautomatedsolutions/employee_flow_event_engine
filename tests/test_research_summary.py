@@ -125,3 +125,28 @@ def test_phase2_summary_counts_event_windows_by_ticker_and_event_id() -> None:
     summary = build_phase2_summary(universe, statuses, pd.DataFrame(), panel).summary
 
     assert summary["event_windows_generated"] == 4
+
+
+def test_phase2_summary_counts_completed_pending_review_as_processed() -> None:
+    universe = pd.DataFrame([{"ticker": "MSFT", "issuer_id": "microsoft"}])
+    statuses = pd.DataFrame(
+        [
+            {
+                "ticker": "MSFT",
+                "sector": "Information Technology",
+                "processing_status": "completed_pending_review",
+                "espp_mentions_found": 1,
+                "candidate_events_found": 3,
+                "accepted_events": 0,
+                "corrected_events": 0,
+                "rejected_events": 0,
+                "usable_event_windows": 0,
+                "warning_count": 0,
+            }
+        ]
+    )
+
+    artifacts = build_phase2_summary(universe, statuses, pd.DataFrame(), pd.DataFrame())
+
+    assert artifacts.summary["companies_processed"] == 1
+    assert artifacts.sector_counts.loc[0, "processed"] == 1

@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError
 
-from src.sec.edgar import FilingAcquisitionMetrics, SECFilingSourceConfig, SecHttpClient, load_batch_filing_inputs
+from src.sec.edgar import FilingAcquisitionMetrics, SECFilingSourceConfig, SecHttpClient, build_sec_http_client, load_batch_filing_inputs
 
 
 class _FakeHTTPResponse:
@@ -190,6 +190,21 @@ def test_load_batch_filing_inputs_cache_only_uses_existing_cache(tmp_path: Path,
     assert cache_only_result.metrics.cache_hits_total == 5
     assert cache_only_result.metrics.cache_misses_total == 0
     assert cache_only_result.inventory_frame["document_source"].tolist() == ["cache", "cache"]
+
+
+def test_build_sec_http_client_allows_cache_only_placeholder_user_agent() -> None:
+    client = build_sec_http_client(
+        SECFilingSourceConfig(
+            source="sec",
+            sec_user_agent=None,
+            cache_only=True,
+            request_delay_seconds=0.2,
+            max_retries=2,
+            timeout_seconds=5.0,
+        )
+    )
+
+    assert client.user_agent == "cache-only-replay"
 
 
 def test_sec_http_client_retries_retryable_http_errors() -> None:

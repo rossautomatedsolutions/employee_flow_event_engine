@@ -15,6 +15,14 @@ PRIMARY_QUEUE_DISPOSITION = "primary_review_queue"
 EXCLUDED_QUEUE_DISPOSITION = "excluded_from_primary_queue"
 PRIMARY_PRIORITY_TIERS = ("Tier1", "Tier2", "Tier3")
 EXCLUDED_PRIORITY_TIER = EXCLUDED_QUEUE_DISPOSITION
+PHASE3_ALLOWED_REVIEW_STATUSES = {
+    "accepted",
+    "corrected",
+    "rejected",
+    "unreviewed",
+    "unresolved",
+    "future_scheduled",
+}
 
 MONTH_NAME_TO_NUMBER = {
     "january": 1,
@@ -43,16 +51,22 @@ PURCHASE_KEYWORD_PATTERN = re.compile(
 )
 STRONG_SPECIFIC_PURCHASE_PATTERNS: dict[str, re.Pattern[str]] = {
     "exercise_of_purchase_rights": re.compile(r"\bafter the exercise of purchase rights on that date\b", flags=re.IGNORECASE),
-    "current_purchase_period_runs_until": re.compile(r"\bcurrent purchase period which runs until\b", flags=re.IGNORECASE),
 }
 STRONG_RECURRING_PURCHASE_PATTERNS: dict[str, re.Pattern[str]] = {
     "purchase_dates_occur_on": re.compile(r"\bpurchase dates? occur on\b", flags=re.IGNORECASE),
     "purchase_date_on_or_before": re.compile(r"\bpurchase date on the first trading day on or before\b", flags=re.IGNORECASE),
     "ends_with_purchase_date": re.compile(r"\bends with a purchase date on the first trading day on or before\b", flags=re.IGNORECASE),
+    "purchase_date_definition_on_or_before": re.compile(
+        r"\bpurchase date\b[^.]{0,160}\bfirst trading day on or before\b",
+        flags=re.IGNORECASE,
+    ),
     "named_purchase_period_dates": re.compile(
         r"\bpurchase period\s*\((?:december|june|january|february|march|april|may|july|august|september|october|november)",
         flags=re.IGNORECASE,
     ),
+}
+PERIOD_BOUNDARY_OR_CAPACITY_PATTERNS: dict[str, re.Pattern[str]] = {
+    "current_purchase_period_runs_until": re.compile(r"\bcurrent purchase period which runs until\b", flags=re.IGNORECASE),
 }
 RECURRING_LANGUAGE_PATTERNS: dict[str, re.Pattern[str]] = {
     "semiannual_cycle": re.compile(r"\b(semi[-\s]?annual|six[-\s]month|twice per year|twice each year)\b", flags=re.IGNORECASE),
@@ -321,8 +335,7 @@ def load_phase3_candidate_reviews(review_file: Path | None) -> pd.DataFrame:
     reviews["review_status"] = reviews["review_status"].str.strip().str.lower()
     reviews.loc[reviews["review_status"] == "", "review_status"] = "unreviewed"
 
-    allowed_statuses = {"accepted", "corrected", "rejected", "unreviewed"}
-    invalid_statuses = sorted(set(reviews["review_status"]).difference(allowed_statuses))
+    invalid_statuses = sorted(set(reviews["review_status"]).difference(PHASE3_ALLOWED_REVIEW_STATUSES))
     if invalid_statuses:
         raise ValueError(f"Review file has invalid review_status values: {invalid_statuses}")
 
@@ -346,11 +359,11 @@ def load_phase3_candidate_reviews(review_file: Path | None) -> pd.DataFrame:
         if not accepted_with_corrected_date.empty:
             raise ValueError("Accepted review rows must leave corrected_event_date blank and use the candidate date")
         noncorrected_with_corrected_date = reviews[
-            (reviews["review_status"].isin(["rejected", "unreviewed"]))
+            (reviews["review_status"].isin(["rejected", "unreviewed", "unresolved", "future_scheduled"]))
             & (reviews["corrected_event_date"] != "")
         ]
         if not noncorrected_with_corrected_date.empty:
-            raise ValueError("Rejected and unreviewed review rows must leave corrected_event_date blank")
+            raise ValueError("Rejected, unreviewed, unresolved, and future_scheduled review rows must leave corrected_event_date blank")
         duplicated_ids = reviews[(reviews["event_review_id"] != "")].duplicated(subset=["event_review_id"], keep=False)
         if duplicated_ids.any():
             duplicates = reviews.loc[(reviews["event_review_id"] != "") & duplicated_ids, ["event_review_id"]].drop_duplicates().to_dict("records")
@@ -1081,6 +1094,7 @@ def _quality_decision(row: pd.Series) -> dict[str, object]:
     truncated = bool(row.get("truncated_snippet_boundary_indicator"))
     strong_specific = any(pattern.search(snippet) for pattern in STRONG_SPECIFIC_PURCHASE_PATTERNS.values())
     strong_recurring = any(pattern.search(snippet) for pattern in STRONG_RECURRING_PURCHASE_PATTERNS.values())
+    period_boundary_or_capacity = any(pattern.search(snippet) for pattern in PERIOD_BOUNDARY_OR_CAPACITY_PATTERNS.values())
     plan_history = (
         bool(non_purchase_flags.intersection({"plan_adoption", "board_approval", "shareholder_approval", "amendment", "termination"}))
         or PLAN_HISTORY_PATTERN.search(snippet) is not None
@@ -1097,7 +1111,11 @@ def _quality_decision(row: pd.Series) -> dict[str, object]:
     if strong_recurring and attachment_score >= 0.45:
         tier = (
             "Tier2"
-            if STRONG_RECURRING_PURCHASE_PATTERNS["purchase_date_on_or_before"].search(snippet) is not None or same_clause
+            if (
+                STRONG_RECURRING_PURCHASE_PATTERNS["purchase_date_on_or_before"].search(snippet) is not None
+                or STRONG_RECURRING_PURCHASE_PATTERNS["purchase_date_definition_on_or_before"].search(snippet) is not None
+                or same_clause
+            )
             else "Tier3"
         )
         return _decision(
@@ -1105,6 +1123,14 @@ def _quality_decision(row: pd.Series) -> dict[str, object]:
             tier=tier,
             disposition=PRIMARY_QUEUE_DISPOSITION,
             rule="explicit_recurring_purchase_schedule",
+        )
+
+    if period_boundary_or_capacity and attachment_score >= 0.65:
+        return _decision(
+            category="purchase_period_end_or_capacity_estimate",
+            tier="Tier2",
+            disposition=PRIMARY_QUEUE_DISPOSITION,
+            rule="period_boundary_or_capacity_estimate_language",
         )
 
     if SUBSCRIPTION_CONTEXT_PATTERN.search(snippet):
@@ -1387,6 +1413,10 @@ def _eligibility_status(
         return "eligible" if corrected_event_date else "ineligible_missing_corrected_date"
     if review_status == "rejected":
         return "ineligible_rejected"
+    if review_status == "unresolved":
+        return "ineligible_unresolved"
+    if review_status == "future_scheduled":
+        return "ineligible_future_scheduled"
     if require_review_for_validated_windows:
         return "ineligible_unreviewed"
     return "eligible"

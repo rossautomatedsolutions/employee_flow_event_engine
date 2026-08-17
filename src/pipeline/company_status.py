@@ -34,6 +34,8 @@ STATUS_COLUMNS = [
     "accepted_events",
     "corrected_events",
     "rejected_events",
+    "unresolved_events",
+    "future_scheduled_events",
     "provisional_event_windows",
     "usable_event_windows",
     "warning_count",
@@ -70,6 +72,8 @@ class CompanyProcessingStatus:
     accepted_events: int = 0
     corrected_events: int = 0
     rejected_events: int = 0
+    unresolved_events: int = 0
+    future_scheduled_events: int = 0
     provisional_event_windows: int = 0
     usable_event_windows: int = 0
     warning_count: int = 0
@@ -104,6 +108,8 @@ class CompanyProcessingStatus:
             "accepted_events": int(self.accepted_events),
             "corrected_events": int(self.corrected_events),
             "rejected_events": int(self.rejected_events),
+            "unresolved_events": int(self.unresolved_events),
+            "future_scheduled_events": int(self.future_scheduled_events),
             "provisional_event_windows": int(self.provisional_event_windows),
             "usable_event_windows": int(self.usable_event_windows),
             "warning_count": int(self.warning_count),
@@ -152,6 +158,8 @@ def read_status_frame(path: Path) -> pd.DataFrame:
         "accepted_events",
         "corrected_events",
         "rejected_events",
+        "unresolved_events",
+        "future_scheduled_events",
         "provisional_event_windows",
         "usable_event_windows",
         "warning_count",

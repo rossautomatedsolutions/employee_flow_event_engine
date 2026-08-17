@@ -74,6 +74,8 @@ def test_phase3_review_packet_generation_uses_stable_candidate_ids() -> None:
     assert "does not provide a model recommendation" in artifacts.packet_markdown.lower()
     assert "specific historical ESPP purchase date" in artifacts.packet_markdown
     assert "stable candidate ID is the join key" in artifacts.instructions_markdown
+    assert "future_scheduled" in artifacts.instructions_markdown
+    assert "unresolved" in artifacts.instructions_markdown
 
 
 def test_phase3_review_packet_writer_preserves_decisions_and_refuses_packet_overwrite(tmp_path: Path) -> None:
@@ -94,3 +96,27 @@ def test_phase3_review_packet_writer_preserves_decisions_and_refuses_packet_over
     packet_csv_path.write_text("tampered packet", encoding="utf-8")
     with pytest.raises(ValueError, match="review packet CSV"):
         write_phase3_review_packet_artifacts(tmp_path, review_queue)
+
+
+def test_phase3_review_packet_writer_reorders_existing_decisions_without_losing_reviews(tmp_path: Path) -> None:
+    review_queue = _review_queue()
+    paths = write_phase3_review_packet_artifacts(tmp_path, review_queue)
+    decisions_path = paths["review_decisions"]
+
+    decisions = pd.read_csv(decisions_path, dtype=str).fillna("")
+    assert len(decisions) >= 2
+
+    reversed_rows = decisions.iloc[::-1].reset_index(drop=True)
+    preserved_id = reversed_rows.loc[0, "event_review_id"]
+    reversed_rows.loc[0, "review_status"] = "accepted"
+    reversed_rows.loc[0, "reviewer_note"] = "Preserve this review."
+    reversed_rows.to_csv(decisions_path, index=False)
+
+    write_phase3_review_packet_artifacts(tmp_path, review_queue)
+
+    repaired = pd.read_csv(decisions_path, dtype=str).fillna("")
+    expected_ids = build_phase3_review_packet_artifacts(review_queue).decisions_template["event_review_id"].tolist()
+    assert repaired["event_review_id"].tolist() == expected_ids
+    repaired_by_id = repaired.set_index("event_review_id")
+    assert repaired_by_id.loc[preserved_id, "review_status"] == "accepted"
+    assert repaired_by_id.loc[preserved_id, "reviewer_note"] == "Preserve this review."

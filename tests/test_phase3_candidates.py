@@ -261,6 +261,117 @@ def test_phase3_review_loader_and_corrected_date_propagation(tmp_path: Path) -> 
     assert artifacts.validated_events[0].event_date.isoformat() == "2024-07-01"
 
 
+def test_phase3_unresolved_and_future_scheduled_reviews_remain_ineligible(tmp_path: Path) -> None:
+    document = _document(
+        text=(
+            "Employee Stock Purchase Plan purchase dates occur on June 30, 2024 and "
+            "December 31, 2024 during each semiannual cycle."
+        ),
+        source_id="0007",
+        filing_type="DEF 14A",
+        filing_date=date(2024, 4, 1),
+    )
+    hint = extract_espp_hints(document)
+    preliminary = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=[document],
+        hints=[hint],
+        reviews=pd.DataFrame(),
+        config=Phase3CandidateConfig(enabled=True),
+    )
+    first_id = preliminary.review_queue.loc[0, "event_review_id"]
+    first_date = preliminary.review_queue.loc[0, "candidate_event_date"]
+    second_id = preliminary.review_queue.loc[1, "event_review_id"]
+    second_date = preliminary.review_queue.loc[1, "candidate_event_date"]
+    review_file = tmp_path / "phase3_reviews_statuses.csv"
+    review_file.write_text(
+        "\n".join(
+            [
+                "event_review_id,ticker,original_assigned_event_date,corrected_event_date,review_status,reviewer_note,reviewed_at,reviewer_id",
+                f"{first_id},AAPL,{first_date},,unresolved,Schedule language without executed-event proof,2026-08-17T12:00:00Z,qa",
+                f"{second_id},AAPL,{second_date},,future_scheduled,Future schedule remains ineligible for historical use,2026-08-17T12:01:00Z,qa",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    reviews = load_phase3_candidate_reviews(review_file)
+    artifacts = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=[document],
+        hints=[hint],
+        reviews=reviews,
+        config=Phase3CandidateConfig(enabled=True),
+    )
+
+    counts = artifacts.validated_audit["review_status"].fillna("unreviewed").value_counts().to_dict()
+    eligibility = artifacts.validated_audit.set_index("event_review_id")["eligibility_status_for_validated_research"].to_dict()
+
+    assert counts == {"future_scheduled": 1, "unresolved": 1}
+    assert eligibility[first_id] == "ineligible_unresolved"
+    assert eligibility[second_id] == "ineligible_future_scheduled"
+    assert artifacts.validated_audit["included_in_event_study"].tolist() == [False, False]
+    assert len(artifacts.validated_events) == 0
+
+
+def test_phase3_reclassifies_period_boundary_and_purchase_date_definition_language() -> None:
+    nvda_like_document = _document(
+        text=(
+            "As of January 28, 2024, the number of shares that remained available for future issuance under the ESPP "
+            "was 227,008,929, of which up to 1,178,052 shares may be purchased under the ESPP in the current "
+            "purchase period which runs until August 30, 2024, based on estimated participation and contribution rates."
+        ),
+        source_id="0008",
+        filing_type="DEF 14A",
+        filing_date=date(2024, 5, 14),
+    )
+    crm_like_document = _document(
+        text=(
+            'The "Purchase Date" means, for any Purchase Period, the first Trading Day on or before June 15 and '
+            "December 15 of each Purchase Period."
+        ),
+        source_id="0009",
+        filing_type="DEF 14A",
+        filing_date=date(2026, 4, 16),
+    )
+
+    nvda_artifacts = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=[nvda_like_document],
+        hints=[extract_espp_hints(nvda_like_document)],
+        reviews=pd.DataFrame(),
+        config=Phase3CandidateConfig(enabled=True),
+    )
+    crm_artifacts = build_phase3_candidate_artifacts(
+        ticker="AAPL",
+        issuer_name="Apple Inc.",
+        issuer_id="apple-inc",
+        cik="0000320193",
+        documents=[crm_like_document],
+        hints=[extract_espp_hints(crm_like_document)],
+        reviews=pd.DataFrame(),
+        config=Phase3CandidateConfig(enabled=True),
+    )
+
+    nvda_row = nvda_artifacts.review_queue.iloc[0]
+    crm_row = crm_artifacts.review_queue.loc[crm_artifacts.review_queue["candidate_event_date"] == "2026-12-15"].iloc[0]
+
+    assert nvda_row["quality_category"] == "purchase_period_end_or_capacity_estimate"
+    assert nvda_row["quality_decision_rule"] == "period_boundary_or_capacity_estimate_language"
+    assert nvda_row["review_priority_tier"] == "Tier2"
+    assert crm_row["quality_category"] == "plausible_recurring_purchase_schedule"
+    assert crm_row["quality_decision_rule"] == "explicit_recurring_purchase_schedule"
+
+
 def _write_phase3_fixture_dir(tmp_path: Path) -> Path:
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()
@@ -375,6 +486,10 @@ def test_run_phase3_batch_writes_review_queue_and_separate_provisional_outputs(t
     review_queue = pd.read_csv(output_dir / "candidate_review_queue.csv")
     review_packet = pd.read_csv(output_dir / "candidate_review_packet.csv")
     review_decisions = pd.read_csv(output_dir / "review_decisions.csv")
+    reviewer_a_decisions = pd.read_csv(output_dir / "review_decisions_reviewer_a.csv")
+    reviewer_b_decisions = pd.read_csv(output_dir / "review_decisions_reviewer_b.csv")
+    consensus_decisions = pd.read_csv(output_dir / "review_consensus_decisions.csv")
+    consensus_audit = pd.read_csv(output_dir / "review_consensus_audit.csv")
     provisional_windows = pd.read_csv(output_dir / "provisional_diagnostic_event_windows.csv")
 
     assert status.loc[0, "processing_status"] == "completed_pending_review"
@@ -384,9 +499,14 @@ def test_run_phase3_batch_writes_review_queue_and_separate_provisional_outputs(t
     assert len(review_queue) == 2
     assert len(review_packet) == 2
     assert len(review_decisions) == 2
+    assert len(reviewer_a_decisions) == 2
+    assert len(reviewer_b_decisions) == 2
+    assert len(consensus_decisions) == 2
+    assert len(consensus_audit) == 2
     assert review_queue["review_priority_tier"].isin(["Tier1", "Tier2", "Tier3"]).all()
     assert set(audit["review_status"]) == {"unreviewed"}
     assert audit["included_in_event_study"].tolist() == [False, False]
+    assert set(consensus_decisions["review_status"]) == {"unreviewed"}
     assert sorted(provisional_windows["event_date"].astype(str).unique().tolist()) == ["2024-06-30", "2024-12-31"]
     assert not (output_dir / "all_event_windows.csv").exists()
     assert not (output_dir / "excluded_candidate_audit.csv").exists()
@@ -395,6 +515,7 @@ def test_run_phase3_batch_writes_review_queue_and_separate_provisional_outputs(t
     assert (output_dir / "reports" / "candidate_review_packet.md").exists()
     assert (output_dir / "reports" / "review_workflow_instructions.md").exists()
     assert (output_dir / "reports" / "candidate_quality_audit.md").exists()
+    assert (output_dir / "reports" / "review_consensus_summary.md").exists()
 
 
 @pytest.mark.parametrize(
@@ -681,8 +802,7 @@ def test_run_phase3_reviewed_batch_applies_decisions_and_preserves_audit_rows(tm
     status = pd.read_csv(output_dir / "company_processing_status.csv")
     audit = pd.read_csv(output_dir / "espp_date_audit.csv")
     windows = pd.read_csv(output_dir / "all_event_windows.csv")
-    review_packet = pd.read_csv(output_dir / "candidate_review_packet.csv")
-    review_template = pd.read_csv(output_dir / "review_decisions.csv")
+    applied_reviews = pd.read_csv(output_dir / "applied_review_decisions.csv")
 
     assert status.loc[0, "processing_status"] == "completed_pending_review"
     assert status.loc[0, "accepted_events"] == 1
@@ -691,12 +811,14 @@ def test_run_phase3_reviewed_batch_applies_decisions_and_preserves_audit_rows(tm
     assert status.loc[0, "candidates_awaiting_review"] == 1
     assert status.loc[0, "usable_event_windows"] == 2
     assert status.loc[0, "provisional_event_windows"] == 0
-    assert len(review_packet) == 4
-    assert len(review_template) == 4
     counts = audit["review_status"].fillna("unreviewed").replace("", "unreviewed").value_counts().to_dict()
     assert counts == {"accepted": 1, "corrected": 1, "rejected": 1, "unreviewed": 1}
     assert sorted(windows["event_date"].astype(str).unique().tolist()) == ["2024-03-29", "2024-06-27"]
     corrected_row = audit.loc[audit["review_status"] == "corrected"].iloc[0]
     assert corrected_row["effective_event_date"] == "2024-06-27"
-    assert set(audit["event_review_id"]) == set(review_template["event_review_id"])
+    assert set(audit["event_review_id"]) == set(applied_reviews["event_review_id"])
+    assert applied_reviews["review_status"].tolist() == ["accepted", "corrected", "rejected", "unreviewed"]
+    assert not (output_dir / "candidate_review_packet.csv").exists()
+    assert not (output_dir / "review_decisions.csv").exists()
+    assert not (output_dir / "review_consensus_decisions.csv").exists()
     assert not (output_dir / "provisional_diagnostic_event_windows.csv").exists()

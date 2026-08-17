@@ -50,6 +50,8 @@ def _headline_metrics(summary: dict[str, Any]) -> pd.DataFrame:
         {"metric": "accepted_events", "value": summary["accepted_events"]},
         {"metric": "corrected_events", "value": summary["corrected_events"]},
         {"metric": "rejected_events", "value": summary["rejected_events"]},
+        {"metric": "unresolved_events", "value": summary["unresolved_events"]},
+        {"metric": "future_scheduled_events", "value": summary["future_scheduled_events"]},
         {"metric": "companies_with_usable_event_windows", "value": summary["companies_with_usable_event_windows"]},
         {"metric": "event_windows_generated", "value": summary["event_windows_generated"]},
         {"metric": "failures", "value": summary["failures"]},
@@ -97,7 +99,14 @@ def build_phase2_summary(
     review_queue_frame = _normalized_frame(review_queue)
     provisional_panel_frame = _normalized_frame(provisional_panel)
 
-    processed_statuses = {"completed", "completed_no_espp", "completed_no_usable_events", "warning", "failed"}
+    processed_statuses = {
+        "completed",
+        "completed_no_espp",
+        "completed_no_usable_events",
+        "completed_pending_review",
+        "warning",
+        "failed",
+    }
     companies_processed = (
         int(status_frame["processing_status"].isin(processed_statuses).sum()) if "processing_status" in status_frame.columns else 0
     )
@@ -166,6 +175,8 @@ def build_phase2_summary(
         "accepted_events": int(status_frame.get("accepted_events", pd.Series(dtype=int)).sum()),
         "corrected_events": int(status_frame.get("corrected_events", pd.Series(dtype=int)).sum()),
         "rejected_events": int(status_frame.get("rejected_events", pd.Series(dtype=int)).sum()),
+        "unresolved_events": int(status_frame.get("unresolved_events", pd.Series(dtype=int)).sum()),
+        "future_scheduled_events": int(status_frame.get("future_scheduled_events", pd.Series(dtype=int)).sum()),
         "companies_with_usable_event_windows": int((status_frame.get("usable_event_windows", pd.Series(dtype=int)) > 0).sum()),
         "failures": int((status_frame.get("processing_status", pd.Series(dtype=str)) == "failed").sum()),
         "warnings": int(status_frame.get("warning_count", pd.Series(dtype=int)).sum()),
@@ -213,6 +224,8 @@ def render_phase2_summary_markdown(summary: dict[str, Any]) -> str:
         f"- Accepted events: {summary['accepted_events']}",
         f"- Corrected events: {summary['corrected_events']}",
         f"- Rejected events: {summary['rejected_events']}",
+        f"- Unresolved events: {summary['unresolved_events']}",
+        f"- Future scheduled events: {summary['future_scheduled_events']}",
         f"- Raw candidate dates: {summary.get('raw_candidate_dates', 0)}",
         f"- Deduplicated candidates: {summary.get('deduplicated_candidates', 0)}",
         f"- Candidates awaiting review: {summary.get('candidates_awaiting_review', 0)}",
