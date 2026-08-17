@@ -183,6 +183,20 @@ For a fully deterministic offline replay of the reviewed workflow, run:
 python -m src.pipeline.run_batch --config config/phase3_reviewed_fixture.yaml --force
 ```
 
+### Phase 3B discovery sample-building run
+
+```bash
+python -m src.pipeline.run_batch --config config/phase3_sec_discovery_sector33_20260817.yaml --force
+```
+
+That discovery config is intentionally different from the reviewed five-company pilot:
+
+- it uses a dated current-membership S&P 500 parent universe but an explicitly bounded, sector-balanced 33-issuer discovery sample documented in [`config/phase3_sec_discovery_sector33_20260817.source.md`](config/phase3_sec_discovery_sector33_20260817.source.md)
+- it keeps the conservative Phase 3 event policy and enables policy-driven auto review only for clear evidence classes
+- it captures richer nearby sentence context and evidence-cue metadata for adjudication and aggregate reporting
+- it disables event-study window generation (`event_study.enabled: false`) so the run can answer the validated-event viability gate before requiring broader ticker price coverage
+- it should be labeled as a current-membership discovery sample, not as a historical point-in-time S&P 500 study
+
 Research v0.1 includes two offline replay configs:
 
 - [`config/example.yaml`](config/example.yaml) is the minimal offline replay and intentionally keeps a tiny synthetic price fixture, including weekend/holiday rows, so the end-to-end path stays small and deterministic.
@@ -261,6 +275,9 @@ The live pilot configuration adds:
 - `filings.request_delay_seconds`
 - `filings.max_retries`
 - `filings.timeout_seconds`
+- `event_study.enabled` to disable window generation during sample-building runs
+- `phase3.auto_policy_review` to auto-resolve clear evidence classes without relaxing the event policy
+- `phase3.review_as_of_date` to make `future_scheduled` versus historical policy decisions reproducible
 
 The committed live pilot configs intentionally omit a concrete
 `filings.sec_user_agent` value so personal contact details are not stored in

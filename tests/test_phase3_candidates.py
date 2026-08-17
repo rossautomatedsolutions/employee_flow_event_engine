@@ -372,6 +372,115 @@ def test_phase3_reclassifies_period_boundary_and_purchase_date_definition_langua
     assert crm_row["quality_decision_rule"] == "explicit_recurring_purchase_schedule"
 
 
+def test_phase3_policy_auto_review_classifies_key_evidence_classes() -> None:
+    auto_config = Phase3CandidateConfig(
+        enabled=True,
+        auto_policy_review=True,
+        review_as_of_date=date(2026, 8, 17),
+    )
+
+    executed_document = _document(
+        text=(
+            "Includes 67,795,754 shares remaining available for issuance as of June 30, 2024 under the "
+            "Employee Stock Purchase Plan, after the exercise of purchase rights on that date."
+        ),
+        source_id="0110",
+        filing_type="DEF 14A",
+        filing_date=date(2024, 10, 24),
+    )
+    administrative_document = _document(
+        text=(
+            "The ESPP allows employees to reduce their percentage election once during a six-month "
+            "purchase period (December 15 and June 15 of each fiscal year), but not to increase that election "
+            "until the next one-year offering period."
+        ),
+        source_id="0111",
+        filing_date=date(2024, 3, 6),
+    )
+    historical_boundary_document = _document(
+        text=(
+            "The number of shares that remained available for future issuance under the ESPP was 227,008,929, "
+            "of which up to 1,178,052 shares may be purchased under the ESPP in the current purchase period "
+            "which runs until August 30, 2024, based on estimated participation and contribution rates."
+        ),
+        source_id="0112",
+        filing_type="DEF 14A",
+        filing_date=date(2024, 5, 14),
+    )
+    future_schedule_document = _document(
+        text=(
+            'The "Purchase Date" means, for any Purchase Period, the first Trading Day on or before June 15 and '
+            "December 15 of each Purchase Period."
+        ),
+        source_id="0113",
+        filing_type="DEF 14A",
+        filing_date=date(2026, 4, 16),
+    )
+
+    executed_artifacts = build_phase3_candidate_artifacts(
+        ticker="MSFT",
+        issuer_name="Microsoft",
+        issuer_id="microsoft",
+        cik="0000789019",
+        documents=[executed_document],
+        hints=[extract_espp_hints(executed_document)],
+        reviews=pd.DataFrame(),
+        config=auto_config,
+    )
+    administrative_artifacts = build_phase3_candidate_artifacts(
+        ticker="CRM",
+        issuer_name="Salesforce",
+        issuer_id="salesforce",
+        cik="0001108524",
+        documents=[administrative_document],
+        hints=[extract_espp_hints(administrative_document)],
+        reviews=pd.DataFrame(),
+        config=auto_config,
+    )
+    historical_boundary_artifacts = build_phase3_candidate_artifacts(
+        ticker="NVDA",
+        issuer_name="Nvidia",
+        issuer_id="nvidia",
+        cik="0001045810",
+        documents=[historical_boundary_document],
+        hints=[extract_espp_hints(historical_boundary_document)],
+        reviews=pd.DataFrame(),
+        config=auto_config,
+    )
+    future_schedule_artifacts = build_phase3_candidate_artifacts(
+        ticker="CRM",
+        issuer_name="Salesforce",
+        issuer_id="salesforce",
+        cik="0001108524",
+        documents=[future_schedule_document],
+        hints=[extract_espp_hints(future_schedule_document)],
+        reviews=pd.DataFrame(),
+        config=auto_config,
+    )
+
+    executed_row = executed_artifacts.validated_audit.iloc[0]
+    administrative_row = administrative_artifacts.validated_audit.iloc[0]
+    historical_boundary_row = historical_boundary_artifacts.validated_audit.iloc[0]
+    future_row = future_schedule_artifacts.validated_audit.loc[
+        future_schedule_artifacts.validated_audit["candidate_event_date"] == "2026-12-15"
+    ].iloc[0]
+
+    assert executed_row["evidence_class"] == "executed_purchase_event"
+    assert executed_row["review_status"] == "accepted"
+    assert executed_row["reviewer_id"] == "policy_auto_review"
+    assert "exercise_of_purchase_rights" in str(executed_row["execution_cues"])
+
+    assert administrative_row["evidence_class"] == "administrative_election_change"
+    assert administrative_row["review_status"] == "rejected"
+    assert "reduce_percentage_election" in str(administrative_row["administrative_cues"])
+
+    assert historical_boundary_row["evidence_class"] == "purchase_period_end_or_capacity_estimate"
+    assert historical_boundary_row["review_status"] == "unresolved"
+
+    assert future_row["evidence_class"] == "recurring_purchase_schedule_or_definition"
+    assert future_row["review_status"] == "future_scheduled"
+
+
 def _write_phase3_fixture_dir(tmp_path: Path) -> Path:
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()

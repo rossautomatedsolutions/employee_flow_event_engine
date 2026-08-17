@@ -19,6 +19,8 @@ class Phase3CandidateConfig:
     context_window_chars: int = 240
     require_review_for_validated_windows: bool = True
     generate_provisional_unreviewed_windows: bool = False
+    auto_policy_review: bool = False
+    review_as_of_date: date | None = None
 
 
 @dataclass(slots=True)
@@ -39,6 +41,7 @@ class BatchRunConfig:
     filings: SECFilingSourceConfig
     filing_fixture_dir: Path | None
     review_file: Path | None
+    event_study_enabled: bool
     event_study: EventStudyConfig
     phase3: Phase3CandidateConfig
 
@@ -106,6 +109,7 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         filings=filings,
         filing_fixture_dir=filings.fixture_dir,
         review_file=Path(raw["reviews"]["review_file"]) if raw.get("reviews", {}).get("review_file") else None,
+        event_study_enabled=bool(event_cfg.get("enabled", True)),
         event_study=EventStudyConfig(
             window_before=int(event_cfg.get("window_before", 10)),
             window_after=int(event_cfg.get("window_after", 10)),
@@ -119,6 +123,12 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
             context_window_chars=int(phase3_cfg.get("context_window_chars", 240)),
             require_review_for_validated_windows=bool(phase3_cfg.get("require_review_for_validated_windows", True)),
             generate_provisional_unreviewed_windows=bool(phase3_cfg.get("generate_provisional_unreviewed_windows", False)),
+            auto_policy_review=bool(phase3_cfg.get("auto_policy_review", False)),
+            review_as_of_date=(
+                _parse_date(phase3_cfg["review_as_of_date"], "phase3.review_as_of_date")
+                if phase3_cfg.get("review_as_of_date")
+                else None
+            ),
         ),
     )
     if config.end_date < config.start_date:
@@ -153,4 +163,8 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         raise ValueError("phase3.enabled must be true when diagnostic extraction override is enabled")
     if config.phase3.generate_provisional_unreviewed_windows and not config.phase3.enabled:
         raise ValueError("phase3.enabled must be true when provisional diagnostic windows are enabled")
+    if config.phase3.generate_provisional_unreviewed_windows and not config.event_study_enabled:
+        raise ValueError("event_study.enabled must be true when provisional diagnostic windows are enabled")
+    if config.phase3.auto_policy_review and not config.phase3.enabled:
+        raise ValueError("phase3.enabled must be true when policy auto review is enabled")
     return config

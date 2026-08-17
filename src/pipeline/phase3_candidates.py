@@ -68,6 +68,17 @@ STRONG_RECURRING_PURCHASE_PATTERNS: dict[str, re.Pattern[str]] = {
 PERIOD_BOUNDARY_OR_CAPACITY_PATTERNS: dict[str, re.Pattern[str]] = {
     "current_purchase_period_runs_until": re.compile(r"\bcurrent purchase period which runs until\b", flags=re.IGNORECASE),
 }
+ADMINISTRATIVE_CUE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "reduce_percentage_election": re.compile(r"\breduce (?:their|the) percentage election\b", flags=re.IGNORECASE),
+    "increase_percentage_election": re.compile(r"\bincrease (?:their|the) election\b", flags=re.IGNORECASE),
+    "change_election": re.compile(r"\b(change|modify|reduce|increase).{0,80}\belection\b", flags=re.IGNORECASE),
+}
+PROSPECTIVE_CUE_PATTERNS: dict[str, re.Pattern[str]] = {
+    **STRONG_RECURRING_PURCHASE_PATTERNS,
+    **PERIOD_BOUNDARY_OR_CAPACITY_PATTERNS,
+    "may_be_purchased": re.compile(r"\bmay be purchased under the espp\b", flags=re.IGNORECASE),
+    "purchase_date_definition": re.compile(r"\b[p\"“]?purchase date[p\"”]?\s+means\b", flags=re.IGNORECASE),
+}
 RECURRING_LANGUAGE_PATTERNS: dict[str, re.Pattern[str]] = {
     "semiannual_cycle": re.compile(r"\b(semi[-\s]?annual|six[-\s]month|twice per year|twice each year)\b", flags=re.IGNORECASE),
     "quarterly_cycle": re.compile(r"\bquarterly\b", flags=re.IGNORECASE),
@@ -141,6 +152,8 @@ RAW_CANDIDATE_COLUMNS = [
     "source_match_text",
     "source_phrase",
     "source_snippet",
+    "source_sentence",
+    "source_sentence_window",
     "match_start_offset",
     "match_end_offset",
     "context_start_offset",
@@ -168,6 +181,10 @@ RAW_CANDIDATE_COLUMNS = [
     "likely_purchase_date_indicator",
     "likely_plan_adoption_amendment_expiration_approval_indicator",
     "non_purchase_language_flags",
+    "execution_cues",
+    "prospective_cues",
+    "administrative_cues",
+    "evidence_class",
     "quality_category",
     "queue_disposition",
     "review_priority_tier",
@@ -202,6 +219,8 @@ REVIEW_QUEUE_COLUMNS = [
     "canonical_report_date",
     "source_phrase",
     "source_snippet",
+    "source_sentence",
+    "source_sentence_window",
     "distance_to_purchase_phrase",
     "same_sentence_as_purchase_phrase",
     "same_clause_as_purchase_phrase",
@@ -222,6 +241,10 @@ REVIEW_QUEUE_COLUMNS = [
     "likely_purchase_date_indicator",
     "likely_plan_adoption_amendment_expiration_approval_indicator",
     "non_purchase_language_flags",
+    "execution_cues",
+    "prospective_cues",
+    "administrative_cues",
+    "evidence_class",
     "quality_category",
     "queue_disposition",
     "review_priority_tier",
@@ -447,7 +470,13 @@ def build_phase3_candidate_artifacts(
     raw_candidates = _assign_duplicate_groups(raw_candidates)
     pre_refinement_review_queue = _build_review_queue(raw_candidates)
     review_queue, excluded_queue = _refine_review_queue(pre_refinement_review_queue)
-    audited_review_queue = _apply_reviews(review_queue, reviews, require_review_for_validated_windows=config.require_review_for_validated_windows)
+    audited_review_queue = _apply_reviews(
+        review_queue,
+        reviews,
+        require_review_for_validated_windows=config.require_review_for_validated_windows,
+        auto_policy_review=config.auto_policy_review,
+        review_as_of_date=config.review_as_of_date or date.today(),
+    )
     finalized_excluded_queue = _finalize_excluded_queue(excluded_queue)
     canonical_annotations = pd.concat(
         [
@@ -467,6 +496,10 @@ def build_phase3_candidate_artifacts(
                     "reviewed_at",
                     "reviewer_id",
                     "eligibility_status_for_validated_research",
+                    "execution_cues",
+                    "prospective_cues",
+                    "administrative_cues",
+                    "evidence_class",
                 ]
             ],
             finalized_excluded_queue[
@@ -485,6 +518,10 @@ def build_phase3_candidate_artifacts(
                     "reviewed_at",
                     "reviewer_id",
                     "eligibility_status_for_validated_research",
+                    "execution_cues",
+                    "prospective_cues",
+                    "administrative_cues",
+                    "evidence_class",
                 ]
             ],
         ],
@@ -505,6 +542,10 @@ def build_phase3_candidate_artifacts(
             "reviewed_at",
             "reviewer_id",
             "eligibility_status_for_validated_research",
+            "execution_cues",
+            "prospective_cues",
+            "administrative_cues",
+            "evidence_class",
         ],
         errors="ignore",
     ).merge(
@@ -876,6 +917,7 @@ def _candidate_row(
     local_phrase_start = max(0, phrase_start - context_start)
     local_phrase_end = max(local_phrase_start, phrase_end - context_start)
     attachment = _attachment_metrics(source_snippet, local_phrase_start, local_phrase_end)
+    source_sentence, source_sentence_window = _sentence_context(document.text, phrase_start, phrase_end)
     return {
         "raw_candidate_id": raw_candidate_id,
         "ticker": ticker,
@@ -897,6 +939,8 @@ def _candidate_row(
         "source_match_text": source_match_text,
         "source_phrase": source_phrase,
         "source_snippet": source_snippet,
+        "source_sentence": source_sentence,
+        "source_sentence_window": source_sentence_window,
         "match_start_offset": match_start,
         "match_end_offset": match_end,
         "context_start_offset": context_start,
@@ -924,6 +968,10 @@ def _candidate_row(
         "likely_purchase_date_indicator": likely_purchase,
         "likely_plan_adoption_amendment_expiration_approval_indicator": likely_non_purchase,
         "non_purchase_language_flags": " | ".join(non_purchase_flags),
+        "execution_cues": " | ".join(_matched_cue_names(source_sentence_window or source_snippet, STRONG_SPECIFIC_PURCHASE_PATTERNS)),
+        "prospective_cues": " | ".join(_matched_cue_names(source_sentence_window or source_snippet, PROSPECTIVE_CUE_PATTERNS)),
+        "administrative_cues": " | ".join(_matched_cue_names(source_sentence_window or source_snippet, ADMINISTRATIVE_CUE_PATTERNS)),
+        "evidence_class": None,
         "quality_category": None,
         "queue_disposition": None,
         "review_priority_tier": None,
@@ -939,6 +987,37 @@ def _candidate_row(
         "reviewer_id": None,
         "eligibility_status_for_validated_research": "ineligible_unreviewed",
     }
+
+
+def _matched_cue_names(text: str, patterns: dict[str, re.Pattern[str]]) -> list[str]:
+    normalized = _normalized_text(text)
+    return [name for name, pattern in patterns.items() if pattern.search(normalized)]
+
+
+def _previous_sentence_boundary(text: str, anchor: int) -> int:
+    last_positions = [text.rfind(marker, 0, anchor) for marker in ".!?\n"]
+    position = max(last_positions)
+    return 0 if position < 0 else position + 1
+
+
+def _next_sentence_boundary(text: str, anchor: int) -> int:
+    positions = [text.find(marker, anchor) for marker in ".!?\n"]
+    valid = [position for position in positions if position >= 0]
+    return len(text) if not valid else min(valid) + 1
+
+
+def _sentence_context(text: str, phrase_start: int, phrase_end: int) -> tuple[str, str]:
+    if not text:
+        return "", ""
+
+    sentence_start = _previous_sentence_boundary(text, phrase_start)
+    sentence_end = _next_sentence_boundary(text, phrase_end)
+    matched_sentence = text[sentence_start:sentence_end].strip()
+
+    window_start = _previous_sentence_boundary(text, max(sentence_start - 1, 0)) if sentence_start > 0 else 0
+    window_end = _next_sentence_boundary(text, min(sentence_end + 1, len(text))) if sentence_end < len(text) else len(text)
+    sentence_window = text[window_start:window_end].strip()
+    return matched_sentence, sentence_window
 
 
 def _assign_duplicate_groups(raw_candidates: pd.DataFrame) -> pd.DataFrame:
@@ -996,6 +1075,8 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
                 "canonical_report_date": _string_or_none(canonical.get("report_date")),
                 "source_phrase": _string_or_none(canonical.get("source_phrase")),
                 "source_snippet": _string_or_none(canonical.get("source_snippet")),
+                "source_sentence": _string_or_none(canonical.get("source_sentence")),
+                "source_sentence_window": _string_or_none(canonical.get("source_sentence_window")),
                 "distance_to_purchase_phrase": canonical.get("distance_to_purchase_phrase"),
                 "same_sentence_as_purchase_phrase": bool(canonical.get("same_sentence_as_purchase_phrase")),
                 "same_clause_as_purchase_phrase": bool(canonical.get("same_clause_as_purchase_phrase")),
@@ -1018,6 +1099,10 @@ def _build_review_queue(raw_candidates: pd.DataFrame) -> pd.DataFrame:
                     canonical["likely_plan_adoption_amendment_expiration_approval_indicator"]
                 ),
                 "non_purchase_language_flags": _string_or_none(canonical.get("non_purchase_language_flags")),
+                "execution_cues": _string_or_none(canonical.get("execution_cues")),
+                "prospective_cues": _string_or_none(canonical.get("prospective_cues")),
+                "administrative_cues": _string_or_none(canonical.get("administrative_cues")),
+                "evidence_class": None,
                 "quality_category": None,
                 "queue_disposition": None,
                 "review_priority_tier": None,
@@ -1055,6 +1140,9 @@ def _refine_review_queue(review_queue: pd.DataFrame) -> tuple[pd.DataFrame, pd.D
     decisions = annotated.apply(_quality_decision, axis=1, result_type="expand")
     for column in decisions.columns:
         annotated[column] = decisions[column].values
+    evidence = annotated.apply(_evidence_annotation, axis=1, result_type="expand")
+    for column in evidence.columns:
+        annotated[column] = evidence[column].values
     annotated = _apply_same_date_shadowing(annotated)
 
     primary_queue = annotated[annotated["queue_disposition"] == PRIMARY_QUEUE_DISPOSITION].copy()
@@ -1249,6 +1337,39 @@ def _quality_decision(row: pd.Series) -> dict[str, object]:
     )
 
 
+def _evidence_annotation(row: pd.Series) -> dict[str, object]:
+    sentence_window = _normalized_text(
+        _string_or_none(row.get("source_sentence_window"))
+        or _string_or_none(row.get("source_sentence"))
+        or _string_or_none(row.get("source_snippet"))
+        or ""
+    )
+    execution_cues = _matched_cue_names(sentence_window, STRONG_SPECIFIC_PURCHASE_PATTERNS)
+    prospective_cues = _matched_cue_names(sentence_window, PROSPECTIVE_CUE_PATTERNS)
+    administrative_cues = _matched_cue_names(sentence_window, ADMINISTRATIVE_CUE_PATTERNS)
+    quality_category = str(row.get("quality_category") or "").strip()
+
+    if execution_cues:
+        evidence_class = "executed_purchase_event"
+    elif administrative_cues:
+        evidence_class = "administrative_election_change"
+    elif quality_category == "purchase_period_end_or_capacity_estimate":
+        evidence_class = "purchase_period_end_or_capacity_estimate"
+    elif prospective_cues or quality_category == "plausible_recurring_purchase_schedule":
+        evidence_class = "recurring_purchase_schedule_or_definition"
+    elif quality_category == "plausible_specific_purchase_date":
+        evidence_class = "specific_purchase_reference_without_execution"
+    else:
+        evidence_class = "insufficient_or_excluded_context"
+
+    return {
+        "execution_cues": " | ".join(execution_cues),
+        "prospective_cues": " | ".join(prospective_cues),
+        "administrative_cues": " | ".join(administrative_cues),
+        "evidence_class": evidence_class,
+    }
+
+
 def _decision(
     *,
     category: str,
@@ -1314,6 +1435,8 @@ def _apply_reviews(
     reviews: pd.DataFrame,
     *,
     require_review_for_validated_windows: bool,
+    auto_policy_review: bool,
+    review_as_of_date: date,
 ) -> pd.DataFrame:
     if review_queue.empty:
         return pd.DataFrame(columns=PHASE3_AUDIT_COLUMNS)
@@ -1324,6 +1447,19 @@ def _apply_reviews(
     audited["reviewer_note"] = None
     audited["reviewed_at"] = None
     audited["reviewer_id"] = None
+
+    if auto_policy_review:
+        auto_reviews = audited.apply(
+            lambda row: _auto_policy_review_row(row, review_as_of_date=review_as_of_date),
+            axis=1,
+            result_type="expand",
+        )
+        auto_matched = auto_reviews["review_status"].fillna("") != ""
+        audited.loc[auto_matched, "review_status"] = auto_reviews.loc[auto_matched, "review_status"]
+        audited.loc[auto_matched, "corrected_event_date"] = auto_reviews.loc[auto_matched, "corrected_event_date"].replace("", None)
+        audited.loc[auto_matched, "reviewer_note"] = auto_reviews.loc[auto_matched, "reviewer_note"].replace("", None)
+        audited.loc[auto_matched, "reviewed_at"] = auto_reviews.loc[auto_matched, "reviewed_at"].replace("", None)
+        audited.loc[auto_matched, "reviewer_id"] = auto_reviews.loc[auto_matched, "reviewer_id"].replace("", None)
 
     if not reviews.empty:
         direct_reviews = reviews[reviews["event_review_id"] != ""].copy()
@@ -1396,6 +1532,46 @@ def _apply_reviews(
     audited["review_note"] = audited["reviewer_note"]
     audited["included_in_provisional_diagnostic"] = False
     return audited.reindex(columns=PHASE3_AUDIT_COLUMNS)
+
+
+def _auto_policy_review_row(row: pd.Series, *, review_as_of_date: date) -> dict[str, object]:
+    candidate_event_date = _string_or_none(row.get("candidate_event_date"))
+    evidence_class = str(row.get("evidence_class") or "").strip()
+    if not candidate_event_date:
+        return _auto_review_result("", "")
+
+    candidate_date = date.fromisoformat(candidate_event_date)
+    if evidence_class == "executed_purchase_event":
+        return _auto_review_result(
+            "accepted",
+            "Policy auto-review accepted explicit executed-event language.",
+        )
+    if evidence_class == "administrative_election_change":
+        return _auto_review_result(
+            "rejected",
+            "Policy auto-review rejected administrative election-change language as non-purchase evidence.",
+        )
+    if evidence_class in {
+        "purchase_period_end_or_capacity_estimate",
+        "recurring_purchase_schedule_or_definition",
+        "specific_purchase_reference_without_execution",
+    }:
+        review_status = "future_scheduled" if candidate_date > review_as_of_date else "unresolved"
+        return _auto_review_result(
+            review_status,
+            f"Policy auto-review classified {evidence_class} without affirmative execution proof.",
+        )
+    return _auto_review_result("", "")
+
+
+def _auto_review_result(review_status: str, reviewer_note: str) -> dict[str, object]:
+    return {
+        "review_status": review_status,
+        "corrected_event_date": "",
+        "reviewer_note": reviewer_note,
+        "reviewed_at": "",
+        "reviewer_id": "policy_auto_review" if review_status else "",
+    }
 
 
 def _eligibility_status(

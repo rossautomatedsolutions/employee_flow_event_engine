@@ -326,7 +326,6 @@ def _process_primary_company(
                 acquisition_metrics_frame=acquisition_metrics_frame,
             )
 
-        prices = loader.load_daily_ohlcv(ticker, config.start_date, config.end_date)
         events, audit_frame = estimate_event_dates_with_audit(
             ticker,
             hints,
@@ -340,18 +339,24 @@ def _process_primary_company(
         )
         events, audit_frame = _filter_artifacts_to_date_range(events, audit_frame, config.start_date, config.end_date)
 
-        event_study = run_event_study(
-            price_frame=prices,
-            benchmark_frame=benchmark_prices,
-            events=events,
-            config=config.event_study,
+        event_study = (
+            run_event_study(
+                price_frame=loader.load_daily_ohlcv(ticker, config.start_date, config.end_date),
+                benchmark_frame=benchmark_prices,
+                events=events,
+                config=config.event_study,
+            )
+            if config.event_study_enabled
+            else None
         )
         accepted_events, corrected_events, rejected_events, unresolved_events, future_scheduled_events = _status_counts(audit_frame)
         warnings = _warning_count(audit_frame) + acquisition_warnings
-        usable_event_windows = _event_window_count(event_study.panel)
+        usable_event_windows = _event_window_count(event_study.panel) if event_study is not None else 0
 
         if mentions_found == 0:
             processing_status = "completed_no_espp"
+        elif event_study is None and (accepted_events > 0 or corrected_events > 0):
+            processing_status = "completed"
         elif usable_event_windows == 0:
             processing_status = "completed_no_usable_events"
         elif warnings > 0:
@@ -359,7 +364,7 @@ def _process_primary_company(
         else:
             processing_status = "completed"
 
-        panel_frame = event_study.panel.copy()
+        panel_frame = event_study.panel.copy() if event_study is not None else pd.DataFrame()
         if not panel_frame.empty:
             panel_frame["ticker"] = ticker
         return CompanyRunArtifacts(
@@ -457,7 +462,7 @@ def _process_phase3_company(
         provisional_events = _filter_events_to_date_range(phase3_artifacts.provisional_events, config.start_date, config.end_date)
         validated_panel = pd.DataFrame()
         provisional_panel = pd.DataFrame()
-        if validated_events or provisional_events:
+        if config.event_study_enabled and (validated_events or provisional_events):
             prices = loader.load_daily_ohlcv(ticker, config.start_date, config.end_date)
             if validated_events:
                 validated_study = run_event_study(
@@ -490,6 +495,8 @@ def _process_phase3_company(
             processing_status = "completed_no_usable_events"
         elif candidates_awaiting_review > 0:
             processing_status = "completed_pending_review"
+        elif not config.event_study_enabled and (accepted_events > 0 or corrected_events > 0):
+            processing_status = "completed"
         elif usable_event_windows == 0:
             processing_status = "completed_no_usable_events"
         elif warnings > 0:
@@ -605,6 +612,48 @@ def _persist_universe_artifacts(output_dir: Path, loaded_universe: LoadedSP500Un
     )
 
 
+def _persist_batch_state(
+    *,
+    status_path: Path,
+    audit_path: Path,
+    windows_path: Path,
+    inventory_path: Path,
+    screening_path: Path,
+    acquisition_metrics_path: Path,
+    raw_candidates_path: Path,
+    review_queue_path: Path,
+    excluded_queue_path: Path,
+    provisional_audit_path: Path,
+    provisional_windows_path: Path,
+    status_records: list[CompanyProcessingStatus],
+    audit_frame: pd.DataFrame,
+    windows_frame: pd.DataFrame,
+    inventory_frame: pd.DataFrame,
+    screening_frame: pd.DataFrame,
+    acquisition_metrics_frame: pd.DataFrame,
+    raw_candidates_frame: pd.DataFrame,
+    review_queue_frame: pd.DataFrame,
+    excluded_queue_frame: pd.DataFrame,
+    provisional_audit_frame: pd.DataFrame,
+    provisional_windows_frame: pd.DataFrame,
+    phase3_enabled: bool,
+) -> None:
+    write_status_frame(status_path, status_frame_from_records(status_records))
+    if phase3_enabled:
+        _write_optional_frame(audit_path, audit_frame)
+    else:
+        _persist_date_audit(status_path.parent, [audit_frame] if not audit_frame.empty else [])
+    _write_optional_frame(windows_path, windows_frame)
+    _write_optional_frame(inventory_path, inventory_frame)
+    _write_optional_frame(screening_path, screening_frame)
+    _write_optional_frame(acquisition_metrics_path, acquisition_metrics_frame)
+    _write_optional_frame(raw_candidates_path, raw_candidates_frame)
+    _write_optional_frame(review_queue_path, review_queue_frame)
+    _write_optional_frame(excluded_queue_path, excluded_queue_frame)
+    _write_optional_frame(provisional_audit_path, provisional_audit_frame)
+    _write_optional_frame(provisional_windows_path, provisional_windows_frame)
+
+
 def _restore_existing_status(existing_row: dict[str, object], ticker: str) -> CompanyProcessingStatus:
     def _int_value(key: str) -> int:
         return int(existing_row.get(key, 0) or 0)
@@ -672,7 +721,11 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
     _persist_universe_artifacts(config.output_dir, loaded_universe, selected_universe)
 
     loader = _build_price_provider(config)
-    benchmark_prices = loader.load_daily_ohlcv(config.benchmark, config.start_date, config.end_date)
+    benchmark_prices = (
+        loader.load_daily_ohlcv(config.benchmark, config.start_date, config.end_date)
+        if config.event_study_enabled
+        else pd.DataFrame()
+    )
     legacy_reviews = _load_event_date_reviews(config.review_file) if not config.phase3.enabled else pd.DataFrame()
     phase3_reviews = load_phase3_candidate_reviews(config.review_file) if config.phase3.enabled else pd.DataFrame()
 
@@ -784,22 +837,58 @@ def run_phase2_batch(config_path: Path, force: bool = False) -> None:
             artifacts.provisional_panel_frame,
             ticker,
         )
+        _persist_batch_state(
+            status_path=status_path,
+            audit_path=audit_path,
+            windows_path=windows_path,
+            inventory_path=inventory_path,
+            screening_path=screening_path,
+            acquisition_metrics_path=acquisition_metrics_path,
+            raw_candidates_path=raw_candidates_path,
+            review_queue_path=review_queue_path,
+            excluded_queue_path=excluded_queue_path,
+            provisional_audit_path=provisional_audit_path,
+            provisional_windows_path=provisional_windows_path,
+            status_records=status_records,
+            audit_frame=combined_audit,
+            windows_frame=combined_windows,
+            inventory_frame=combined_inventory,
+            screening_frame=combined_screening,
+            acquisition_metrics_frame=combined_acquisition_metrics,
+            raw_candidates_frame=combined_raw_candidates,
+            review_queue_frame=combined_review_queue,
+            excluded_queue_frame=combined_excluded_queue,
+            provisional_audit_frame=combined_provisional_audit,
+            provisional_windows_frame=combined_provisional_windows,
+            phase3_enabled=config.phase3.enabled,
+        )
 
     status_frame = status_frame_from_records(status_records)
-    write_status_frame(status_path, status_frame)
-    if config.phase3.enabled:
-        _write_optional_frame(audit_path, combined_audit)
-    else:
-        _persist_date_audit(config.output_dir, [combined_audit] if not combined_audit.empty else [])
-    _write_optional_frame(windows_path, combined_windows)
-    _write_optional_frame(inventory_path, combined_inventory)
-    _write_optional_frame(screening_path, combined_screening)
-    _write_optional_frame(acquisition_metrics_path, combined_acquisition_metrics)
-    _write_optional_frame(raw_candidates_path, combined_raw_candidates)
-    _write_optional_frame(review_queue_path, combined_review_queue)
-    _write_optional_frame(excluded_queue_path, combined_excluded_queue)
-    _write_optional_frame(provisional_audit_path, combined_provisional_audit)
-    _write_optional_frame(provisional_windows_path, combined_provisional_windows)
+    _persist_batch_state(
+        status_path=status_path,
+        audit_path=audit_path,
+        windows_path=windows_path,
+        inventory_path=inventory_path,
+        screening_path=screening_path,
+        acquisition_metrics_path=acquisition_metrics_path,
+        raw_candidates_path=raw_candidates_path,
+        review_queue_path=review_queue_path,
+        excluded_queue_path=excluded_queue_path,
+        provisional_audit_path=provisional_audit_path,
+        provisional_windows_path=provisional_windows_path,
+        status_records=status_records,
+        audit_frame=combined_audit,
+        windows_frame=combined_windows,
+        inventory_frame=combined_inventory,
+        screening_frame=combined_screening,
+        acquisition_metrics_frame=combined_acquisition_metrics,
+        raw_candidates_frame=combined_raw_candidates,
+        review_queue_frame=combined_review_queue,
+        excluded_queue_frame=combined_excluded_queue,
+        provisional_audit_frame=combined_provisional_audit,
+        provisional_windows_frame=combined_provisional_windows,
+        phase3_enabled=config.phase3.enabled,
+    )
     if config.phase3.enabled:
         _persist_applied_review_file(config.output_dir, phase3_reviews)
     if config.phase3.enabled:
