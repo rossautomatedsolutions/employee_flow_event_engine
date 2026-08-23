@@ -1727,18 +1727,35 @@ def test_trading_foundation_price_loader_reads_eod_schema_and_filters_date_range
         historical_data_root,
         "TEST",
         [
-            "100.5,101.0,99.5,1200,100.0,2024-06-28 04:00:00+00:00,1000000,100.3,TEST",
-            "101.5,102.0,100.5,1250,101.0,2024-07-01 04:00:00+00:00,1100000,101.4,TEST",
-            "102.5,103.0,101.5,1300,102.0,2024-07-02 04:00:00+00:00,1200000,102.4,TEST",
+            "100.5,101.0,99.5,1200,100.0,2026-04-28 04:00:00+00:00,1000000,100.3,TEST",
+            "101.5,102.0,100.5,1250,101.0,2026-04-29T04:00:00Z,1100000,101.4,TEST",
+            "102.5,103.0,101.5,1300,102.0,2026-04-30T04:00:00Z,1200000,102.4,TEST",
         ],
     )
 
     loader = TradingFoundationPriceLoader(historical_data_root)
-    frame = loader.load_daily_ohlcv("TEST", date(2024, 7, 1), date(2024, 7, 2))
+    frame = loader.load_daily_ohlcv("TEST", date(2026, 4, 29), date(2026, 4, 30))
 
-    assert frame.index.strftime("%Y-%m-%d").tolist() == ["2024-07-01", "2024-07-02"]
+    assert frame.index.strftime("%Y-%m-%d").tolist() == ["2026-04-29", "2026-04-30"]
     assert frame["open"].tolist() == [101.0, 102.0]
     assert frame["close"].tolist() == [101.5, 102.5]
+
+
+def test_trading_foundation_price_loader_rejects_malformed_timestamp(tmp_path: Path) -> None:
+    historical_data_root = tmp_path / "historical_data"
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "TEST",
+        [
+            "100.5,101.0,99.5,1200,100.0,2026-04-28 04:00:00+00:00,1000000,100.3,TEST",
+            "101.5,102.0,100.5,1250,101.0,not-a-real-timestamp,1100000,101.4,TEST",
+        ],
+    )
+
+    loader = TradingFoundationPriceLoader(historical_data_root)
+
+    with pytest.raises(ValueError, match="Trading Foundation EOD data has invalid timestamp values at rows \\[1\\]"):
+        loader.load_daily_ohlcv("TEST", date(2026, 4, 28), date(2026, 4, 29))
 
 
 def test_run_first_pass_event_study_supports_trading_foundation_price_source(

@@ -89,6 +89,22 @@ class TradingFoundationPriceLoader:
         symbol = ticker.strip().upper()
         return self._resolved_root() / symbol / "eod" / f"{symbol}_1D.csv"
 
+    def _parse_timestamps(self, timestamps: pd.Series, csv_path: Path) -> pd.Series:
+        parsed = pd.to_datetime(
+            timestamps,
+            errors="coerce",
+            utc=True,
+            format="ISO8601",
+        )
+        invalid_timestamps = parsed.isna()
+        if invalid_timestamps.any():
+            bad_rows = sorted(set(parsed.index[invalid_timestamps].tolist()))
+            raise ValueError(
+                "Trading Foundation EOD data has invalid timestamp values at rows "
+                f"{bad_rows[:5]} in {csv_path}"
+            )
+        return parsed
+
     def _load_symbol_dataset(self, ticker: str) -> pd.DataFrame:
         symbol = ticker.strip().upper()
         cached = self._dataset_cache.get(symbol)
@@ -115,15 +131,7 @@ class TradingFoundationPriceLoader:
                 f"Trading Foundation EOD data missing required columns {missing} in {csv_path}"
             )
 
-        frame["t"] = pd.to_datetime(frame["t"], errors="coerce", utc=True)
-        invalid_timestamps = frame["t"].isna()
-        if invalid_timestamps.any():
-            bad_rows = sorted(set(frame.index[invalid_timestamps].tolist()))
-            raise ValueError(
-                "Trading Foundation EOD data has invalid timestamp values at rows "
-                f"{bad_rows[:5]} in {csv_path}"
-            )
-
+        frame["t"] = self._parse_timestamps(frame["t"], csv_path)
         frame["date"] = frame["t"].dt.tz_localize(None).dt.normalize()
         duplicate_dates = frame["date"].duplicated(keep=False)
         if duplicate_dates.any():
