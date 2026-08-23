@@ -1845,6 +1845,70 @@ def test_run_first_pass_event_study_supports_trading_foundation_price_source(
     assert sorted(set(all_events["ticker"])) == ["TEST"]
 
 
+def test_trading_foundation_business_day_repo_config_targets_aapl_2025_overlap(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    historical_data_root = tmp_path / "historical_data"
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "AAPL",
+        [
+            "200.0,201.0,199.0,1000,199.5,2025-06-24T04:00:00Z,1000000,200.1,AAPL",
+            "201.0,202.0,200.0,1005,200.5,2025-06-25T04:00:00Z,1005000,201.1,AAPL",
+            "202.0,203.0,201.0,1010,201.5,2025-06-26T04:00:00Z,1010000,202.1,AAPL",
+            "203.0,204.0,202.0,1015,202.5,2025-06-27T04:00:00Z,1015000,203.1,AAPL",
+            "206.0,207.0,205.0,1200,205.5,2025-06-30T04:00:00Z,1800000,206.1,AAPL",
+            "207.0,208.0,206.0,1100,206.5,2025-07-01T04:00:00Z,1200000,207.1,AAPL",
+        ],
+    )
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "SPY",
+        [
+            "600.0,601.0,599.0,2000,599.5,2025-06-24T04:00:00Z,2000000,600.1,SPY",
+            "601.0,602.0,600.0,2005,600.5,2025-06-25T04:00:00Z,2005000,601.1,SPY",
+            "602.0,603.0,601.0,2010,601.5,2025-06-26T04:00:00Z,2010000,602.1,SPY",
+            "603.0,604.0,602.0,2015,602.5,2025-06-27T04:00:00Z,2015000,603.1,SPY",
+            "604.0,605.0,603.0,2020,603.5,2025-06-30T04:00:00Z,2020000,604.1,SPY",
+            "605.0,606.0,604.0,2025,604.5,2025-07-01T04:00:00Z,2025000,605.1,SPY",
+        ],
+    )
+
+    template_path = Path("config/trading_foundation_business_day_example.yaml")
+    output_dir = tmp_path / "artifacts"
+    config_text = template_path.read_text(encoding="utf-8")
+    updated = config_text.replace(
+        'price_data_path: "C:/Users/RAS/OneDrive/RAS/Trading/Live/Trading_Foundation/historical_data"',
+        f'price_data_path: "{historical_data_root.as_posix()}"',
+    ).replace(
+        'output_dir: "artifacts/trading_foundation_business_day_example"',
+        f'output_dir: "{output_dir.as_posix()}"',
+    )
+    config_path = tmp_path / template_path.name
+    config_path.write_text(updated, encoding="utf-8")
+
+    config = _load_config(config_path)
+    loader = _build_price_data_provider(config)
+    assert isinstance(loader, TradingFoundationPriceLoader)
+    assert [ticker_cfg.ticker for ticker_cfg in config.tickers] == ["AAPL"]
+    assert config.start_date.isoformat() == "2025-06-24"
+    assert config.end_date.isoformat() == "2025-07-01"
+    assert config.review_file == Path("config/trading_foundation_business_day_validation_reviews.csv")
+
+    _guard_yfinance_import(monkeypatch)
+    run_first_pass_event_study(config_path)
+
+    audit = pd.read_csv(output_dir / "espp_date_audit.csv")
+    all_events = pd.read_csv(output_dir / "all_event_windows.csv")
+
+    assert sorted(audit["assigned_event_date"].astype(str).tolist()) == ["2025-06-30", "2025-12-31"]
+    assert audit["review_status"].tolist() == ["accepted", "accepted"]
+    assert sorted(set(all_events["event_date"].astype(str))) == ["2025-06-30"]
+    assert sorted(set(all_events["ticker"])) == ["AAPL"]
+    assert "CRM" not in audit["ticker"].astype(str).tolist()
+
+
 def test_load_config_and_offline_pipeline_use_csv_price_provider(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fixture_dir = tmp_path / "filings"
     fixture_dir.mkdir()

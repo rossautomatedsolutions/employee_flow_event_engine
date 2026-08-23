@@ -148,24 +148,25 @@ No silent fallback was added from empirical Trading Foundation data to synthetic
 Automated validation completed in the sandbox:
 
 ```text
-python -m pytest -q tests/test_pipeline_diagnostics.py tests/test_phase2_batch.py
+python -m pytest -q
 ```
 
 Result:
 
-- `54 passed` on Sunday, August 23, 2026
+- `110 passed` on Sunday, August 23, 2026
 
 What was actually validated:
 
 - Trading Foundation EOD schema mapping
 - date-range filtering
 - end-to-end first-pass event-study execution with a Trading Foundation-style local directory
+- structural execution of the tracked `config/trading_foundation_business_day_example.yaml` against a temp Trading Foundation-style root, confirming that the bounded config runs the AAPL `2025-06-30` overlap case
 - batch-config acceptance of `price_source: trading_foundation` in `offline_mode`
 
 What was not validated in the sandbox:
 
 - real main-machine ticker coverage under `C:\Users\RAS\OneDrive\RAS\Trading\Live\Trading_Foundation\historical_data`
-- real AAPL / CRM / SPY files at that root
+- real AAPL / SPY files at that root for the bounded June 2025 validation window
 - any upstream option snapshot / option OHLC / IV metrics coverage
 
 ## Main-machine validation package
@@ -182,30 +183,51 @@ Exact Trading Foundation path in config:
 C:\Users\RAS\OneDrive\RAS\Trading\Live\Trading_Foundation\historical_data
 ```
 
+Bounded validation date range in config:
+
+```text
+2025-06-24 through 2025-07-01
+```
+
+Why this range:
+
+- the target reviewed event is `AAPL 2025-06-30`
+- `window_before: 1` needs the prior trading day (`2025-06-27`)
+- `window_after: 1` needs the next trading day (`2025-07-01`)
+- `volume_lookback: 5` needs five trading rows ending on the event day, so the earliest required start is `2025-06-24`
+
+Known main-machine coverage facts confirmed on August 23, 2026:
+
+- `SPY` EOD coverage exists from `2025-05-27` through `2026-08-21`
+- `AAPL` EOD coverage exists from `2025-01-02` through `2026-05-29`
+- canonical `CRM` EOD coverage is currently absent
+
+That means CRM absence is not a blocker to adapter validation, because the reviewed `AAPL 2025-06-30` event already provides a valid overlapping AAPL/SPY real-data case.
+
 Expected output files:
 
 - `artifacts/trading_foundation_business_day_example/benchmark_prices.csv`
 - `artifacts/trading_foundation_business_day_example/AAPL_prices.csv`
-- `artifacts/trading_foundation_business_day_example/CRM_prices.csv`
 - `artifacts/trading_foundation_business_day_example/espp_date_audit.csv`
 - `artifacts/trading_foundation_business_day_example/all_event_windows.csv`
 - `artifacts/trading_foundation_business_day_example/reports/espp_research_summary.md`
 
 Expected sanity checks:
 
-- `benchmark_prices.csv`, `AAPL_prices.csv`, and `CRM_prices.csv` are non-empty
-- price dates fall inside `2024-06-28` through `2025-01-03`
-- `espp_date_audit.csv` contains business-day `effective_event_date` values such as `2024-07-01`, `2024-12-31`, and `2025-01-02`
+- `benchmark_prices.csv` and `AAPL_prices.csv` are non-empty
+- price dates fall inside `2025-06-24` through `2025-07-01`
+- `espp_date_audit.csv` contains the reviewed `AAPL 2025-06-30` event and may also show the separately reviewed `AAPL 2025-12-31` row outside the bounded validation window
 - `all_event_windows.csv` is non-empty
+- `all_event_windows.csv` contains `AAPL` event rows for `2025-06-30`
 - the run does not import or depend on `yfinance`
 
 Failure signals to watch for:
 
-- missing Trading Foundation EOD file for `AAPL`, `CRM`, or `SPY`
+- missing Trading Foundation EOD file for `AAPL` or `SPY`
 - missing required columns
 - invalid timestamp values
 - requested date range outside available coverage
-- empty `all_event_windows.csv` caused by missing underlying coverage on reviewed event dates
+- empty `all_event_windows.csv` caused by missing coverage for the reviewed `AAPL 2025-06-30` event
 
 Please paste back for follow-up review:
 

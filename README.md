@@ -84,7 +84,7 @@ The example run is fully local/reproducible today:
 
 That means the current example config is suitable for fully offline Research v0.1 replay. The legacy live path still exists if you explicitly switch `price_source` back to `yfinance`.
 
-For a main-machine validation run against canonical Trading Foundation daily data, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml).
+For a main-machine validation run against canonical Trading Foundation daily data, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml). As of August 23, 2026, that config intentionally targets the reviewed AAPL `2025-06-30` event because it overlaps canonical AAPL and SPY EOD coverage while canonical CRM EOD coverage is currently absent.
 
 ### Phase 2 bounded batch example
 
@@ -250,7 +250,7 @@ Research v0.1 includes two offline replay configs:
 
 Both configs remain research fixtures for offline replay and decision support. They are not production ESPP date validation.
 
-For empirical daily-price validation against the canonical upstream market-data substrate, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml). It keeps the same filing fixtures and review decisions as the business-day replay, but points `price_source` at the Trading Foundation `historical_data` root.
+For empirical daily-price validation against the canonical upstream market-data substrate, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml). It uses the same AAPL filing fixture but a dedicated AAPL-only review file and a bounded 2025-06-24 through 2025-07-01 window so the reviewed AAPL `2025-06-30` event can be validated against canonical AAPL and SPY EOD coverage. CRM is intentionally excluded from that main-machine validation config because canonical CRM EOD data is currently absent.
 
 Example config includes:
 
@@ -309,6 +309,8 @@ Required columns:
 - `volume`
 
 The current implemented ESPP workflows consume only this daily underlying layer. They do not currently reconstruct historical option chains, option OHLC exits, or IV surfaces inside this repo. See [`docs/HISTORICAL_OPTIONS_DATA_STATUS.md`](docs/HISTORICAL_OPTIONS_DATA_STATUS.md) for the full requirement mapping.
+
+The tracked main-machine validation config is intentionally AAPL-only and targets the reviewed AAPL `2025-06-30` event. CRM is not required for adapter validation because the current implemented research path only needs underlying and benchmark daily OHLCV, and AAPL plus SPY already provide a valid overlapping real-data case.
 
 ## Filing input modes
 

@@ -1,27 +1,25 @@
 # Main-machine validation example using canonical Trading Foundation daily EOD data.
-# This config keeps the same reviewed business-day ESPP fixture workflow as
-# offline_business_day_example.yaml, but replaces the price fixture with the
-# upstream Trading_Foundation historical_data root.
+# This config targets the reviewed AAPL 2025-06-30 ESPP event because it has
+# confirmed overlap with both AAPL and SPY canonical EOD coverage on the main
+# machine. CRM is intentionally excluded because canonical CRM EOD data is not
+# currently available.
 benchmark: SPY
 price_source: trading_foundation
 price_data_path: "C:/Users/RAS/OneDrive/RAS/Trading/Live/Trading_Foundation/historical_data"
-start_date: "2024-06-28"
-end_date: "2025-01-03"
+start_date: "2025-06-24"
+end_date: "2025-07-01"
 output_dir: "artifacts/trading_foundation_business_day_example"
 
 filings:
   fixture_dir: "fixtures/sec_filings"
 
 reviews:
-  review_file: "config/espp_business_day_reviews.csv"
+  review_file: "config/trading_foundation_business_day_validation_reviews.csv"
 
 tickers:
   - ticker: AAPL
     market_cap: 3000000000000
     employees: 161000
-  - ticker: CRM
-    market_cap: 280000000000
-    employees: 73600
 
 event_study:
   window_before: 1
