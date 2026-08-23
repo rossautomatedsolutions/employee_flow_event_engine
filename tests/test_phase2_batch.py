@@ -400,6 +400,44 @@ def test_load_batch_config_accepts_sec_user_agent_from_environment(tmp_path: Pat
     assert config.filings.sec_user_agent == "Env Test env@example.com"
 
 
+def test_load_batch_config_allows_offline_trading_foundation_price_source(tmp_path: Path) -> None:
+    config_path = tmp_path / "phase2_trading_foundation.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'benchmark: "SPY"',
+                f'universe_file: "{(tmp_path / "universe.csv").as_posix()}"',
+                'ticker_subset: ["AAPL"]',
+                'start_date: "2024-06-28"',
+                'end_date: "2025-01-01"',
+                f'output_dir: "{(tmp_path / "artifacts").as_posix()}"',
+                f'cache_dir: "{(tmp_path / "cache").as_posix()}"',
+                "resume_mode: false",
+                "offline_mode: true",
+                "max_companies: 1",
+                'price_source: "trading_foundation"',
+                f'price_data_path: "{(tmp_path / "historical_data").as_posix()}"',
+                "filings:",
+                '  source: "fixture"',
+                f'  fixture_dir: "{(tmp_path / "fixtures").as_posix()}"',
+                "reviews:",
+                "  review_file: null",
+                "event_study:",
+                "  window_before: 0",
+                "  window_after: 1",
+                "  volume_lookback: 5",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_batch_config(config_path)
+
+    assert config.offline_mode is True
+    assert config.price_source == "trading_foundation"
+    assert config.price_data_path == tmp_path / "historical_data"
+
+
 def test_load_batch_config_allows_cache_only_sec_without_user_agent(tmp_path: Path) -> None:
     config_path = _write_sec_config(
         tmp_path=tmp_path,

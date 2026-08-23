@@ -10,6 +10,8 @@ import yaml
 from src.analysis.event_study import EventStudyConfig
 from src.sec.edgar import DEFAULT_SEC_FORMS, SECFilingSourceConfig
 
+LOCAL_DETERMINISTIC_PRICE_SOURCES = {"csv", "trading_foundation", "trading-foundation", "tf"}
+
 
 @dataclass(slots=True)
 class Phase3CandidateConfig:
@@ -135,8 +137,11 @@ def load_batch_config(config_path: Path) -> BatchRunConfig:
         raise ValueError("end_date must be on or after start_date")
     if config.max_companies is not None and config.max_companies <= 0:
         raise ValueError("max_companies must be positive when provided")
-    if config.offline_mode and config.price_source.strip().lower() != "csv":
-        raise ValueError("offline_mode requires price_source: csv for deterministic runs")
+    if config.offline_mode and config.price_source.strip().lower() not in LOCAL_DETERMINISTIC_PRICE_SOURCES:
+        raise ValueError(
+            "offline_mode requires a local deterministic price_source such as "
+            "'csv' or 'trading_foundation'"
+        )
     if config.filings.source not in {"fixture", "sec"}:
         raise ValueError("filings.source must be either 'fixture' or 'sec'")
     if config.filings.source == "fixture" and config.filing_fixture_dir is None:

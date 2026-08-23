@@ -9,7 +9,7 @@ The repository now has two explicit tracks:
 
 ## What it does
 
-- Loads historical OHLCV data from either local CSV fixtures or the legacy `yfinance` provider.
+- Loads historical OHLCV data from local CSV fixtures, canonical Trading Foundation EOD folders, or the legacy `yfinance` provider.
 - Loads local filing fixtures (YAML) for reproducible ESPP text inputs.
 - Can acquire bounded live SEC / EDGAR submissions and filing documents keyed by issuer CIK.
 - Parses filing text (10-K / DEF 14A style documents) for ESPP clues.
@@ -53,6 +53,7 @@ config/
   phase3_live_sec_pilot_cache_only_reviewed.yaml
   phase3_live_sec_pilot_cache_only_diagnostic.yaml
   phase3_reviewed_fixture.yaml
+  trading_foundation_business_day_example.yaml
   sp500_universe_2026-07-04.csv
 fixtures/
   prices/
@@ -82,6 +83,8 @@ The example run is fully local/reproducible today:
 - price and benchmark data come from a local CSV fixture
 
 That means the current example config is suitable for fully offline Research v0.1 replay. The legacy live path still exists if you explicitly switch `price_source` back to `yfinance`.
+
+For a main-machine validation run against canonical Trading Foundation daily data, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml).
 
 ### Phase 2 bounded batch example
 
@@ -247,10 +250,12 @@ Research v0.1 includes two offline replay configs:
 
 Both configs remain research fixtures for offline replay and decision support. They are not production ESPP date validation.
 
+For empirical daily-price validation against the canonical upstream market-data substrate, use [`config/trading_foundation_business_day_example.yaml`](config/trading_foundation_business_day_example.yaml). It keeps the same filing fixtures and review decisions as the business-day replay, but points `price_source` at the Trading Foundation `historical_data` root.
+
 Example config includes:
 
-- `price_source: csv`
-- `price_data_path` pointing at a local research price fixture under [`fixtures/prices`](fixtures/prices)
+- `price_source: csv` for fixture replay, or `price_source: trading_foundation` for canonical upstream EOD data
+- `price_data_path` pointing either at a local research price fixture under [`fixtures/prices`](fixtures/prices) or at the Trading Foundation `historical_data` root
 - ticker metadata (market cap + employees) for cross-sectional grouping
 - a local `filings.fixture_dir` pointing at repo fixtures under [`fixtures/sec_filings`](fixtures/sec_filings)
 - an optional `reviews.review_file` pointing at a local ESPP date review CSV
@@ -278,6 +283,32 @@ SPY,2024-06-30,302,303,301,302,1500000
 ```
 
 If `price_source: csv` is selected, the offline path does not import or call `yfinance`.
+
+## Trading Foundation EOD input
+
+For canonical upstream daily market data, set:
+
+- `price_source: trading_foundation`
+- `price_data_path: "C:/Users/RAS/OneDrive/RAS/Trading/Live/Trading_Foundation/historical_data"` on the main machine
+
+The loader accepts either the `historical_data` directory itself or the Trading Foundation repo root containing that directory.
+
+Expected per-symbol path:
+
+```text
+historical_data/<TICKER>/eod/<TICKER>_1D.csv
+```
+
+Required columns:
+
+- `t`
+- `open`
+- `high`
+- `low`
+- `close`
+- `volume`
+
+The current implemented ESPP workflows consume only this daily underlying layer. They do not currently reconstruct historical option chains, option OHLC exits, or IV surfaces inside this repo. See [`docs/HISTORICAL_OPTIONS_DATA_STATUS.md`](docs/HISTORICAL_OPTIONS_DATA_STATUS.md) for the full requirement mapping.
 
 ## Filing input modes
 
@@ -599,7 +630,8 @@ Validated versus provisional outputs are intentionally separated:
 - Manual review can override or reject heuristic dates, but the process is still local research curation rather than production-grade event mastering.
 - Local fixtures are research inputs, not canonical SEC records.
 - The offline CSV price fixture is only a small research replay sample; it is not a complete market-history source.
-- The legacy `yfinance` path remains available for exploratory use, but it is not part of the fully offline replay path.
+- Trading Foundation daily EOD data is now the preferred empirical price source when the canonical upstream root is available locally.
+- The legacy `yfinance` path remains available for exploratory use, but it is not part of the fully offline replay path and is not the preferred empirical source.
 
 ## Optional Future Research
 

@@ -62,7 +62,7 @@ from src.pipeline.run_event_study import (
 )
 from src.analysis.event_study import EventStudyConfig, run_event_study
 from src.analysis.strategy import CrossSectionConfig, StrategyConfig
-from src.data.price_loader import CSVPriceLoader
+from src.data.price_loader import CSVPriceLoader, TradingFoundationPriceLoader
 from src.data.sec_parser import parse_many_espp_hints
 from src.events.espp_event_extractor import ESPPEvent
 from src.events.espp_event_extractor import estimate_event_dates_with_audit
@@ -1705,6 +1705,127 @@ def test_csv_price_loader_errors_are_clear(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="available range is 2024-06-30..2024-06-30"):
         CSVPriceLoader(good_csv).load_daily_ohlcv("TEST", date(2024, 7, 1), date(2024, 7, 2))
+
+
+def _write_trading_foundation_eod_fixture(root: Path, ticker: str, rows: list[str]) -> None:
+    eod_dir = root / ticker / "eod"
+    eod_dir.mkdir(parents=True, exist_ok=True)
+    (eod_dir / f"{ticker}_1D.csv").write_text(
+        "\n".join(
+            [
+                "close,high,low,n,open,t,volume,vw,symbol",
+                *rows,
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_trading_foundation_price_loader_reads_eod_schema_and_filters_date_range(tmp_path: Path) -> None:
+    historical_data_root = tmp_path / "historical_data"
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "TEST",
+        [
+            "100.5,101.0,99.5,1200,100.0,2024-06-28 04:00:00+00:00,1000000,100.3,TEST",
+            "101.5,102.0,100.5,1250,101.0,2024-07-01 04:00:00+00:00,1100000,101.4,TEST",
+            "102.5,103.0,101.5,1300,102.0,2024-07-02 04:00:00+00:00,1200000,102.4,TEST",
+        ],
+    )
+
+    loader = TradingFoundationPriceLoader(historical_data_root)
+    frame = loader.load_daily_ohlcv("TEST", date(2024, 7, 1), date(2024, 7, 2))
+
+    assert frame.index.strftime("%Y-%m-%d").tolist() == ["2024-07-01", "2024-07-02"]
+    assert frame["open"].tolist() == [101.0, 102.0]
+    assert frame["close"].tolist() == [101.5, 102.5]
+
+
+def test_run_first_pass_event_study_supports_trading_foundation_price_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "test.yaml").write_text(
+        "\n".join(
+            [
+                "ticker: TEST",
+                "filing_type: 10-K",
+                'filing_date: "2024-02-15"',
+                "source_id: test_fixture",
+                "text: |",
+                "  The employee stock purchase plan purchase date occurs on July 1.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    historical_data_root = tmp_path / "historical_data"
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "TEST",
+        [
+            "100.0,101.0,99.0,1200,99.5,2024-06-28 04:00:00+00:00,1000000,100.1,TEST",
+            "101.0,102.0,100.0,1300,100.5,2024-07-01 04:00:00+00:00,1500000,101.1,TEST",
+            "102.0,103.0,101.0,1350,101.5,2024-07-02 04:00:00+00:00,1200000,102.1,TEST",
+        ],
+    )
+    _write_trading_foundation_eod_fixture(
+        historical_data_root,
+        "SPY",
+        [
+            "500.0,501.0,499.0,2000,499.5,2024-06-28 04:00:00+00:00,2000000,500.1,SPY",
+            "501.0,502.0,500.0,2100,500.5,2024-07-01 04:00:00+00:00,2100000,501.1,SPY",
+            "502.0,503.0,501.0,2200,501.5,2024-07-02 04:00:00+00:00,2200000,502.1,SPY",
+        ],
+    )
+
+    output_dir = tmp_path / "artifacts"
+    config_path = tmp_path / "trading_foundation.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "tickers:",
+                '  - ticker: "TEST"',
+                "    market_cap: 1000000000",
+                "    employees: 10000",
+                'benchmark: "SPY"',
+                'start_date: "2024-06-28"',
+                'end_date: "2024-07-02"',
+                f'output_dir: "{output_dir.as_posix()}"',
+                'price_source: "trading_foundation"',
+                f'price_data_path: "{historical_data_root.as_posix()}"',
+                "filings:",
+                f'  fixture_dir: "{fixture_dir.as_posix()}"',
+                "reviews:",
+                "  review_file: null",
+                "event_study:",
+                "  window_before: 0",
+                "  window_after: 1",
+                "  volume_lookback: 5",
+                "strategy:",
+                "  volume_spike_threshold: 0.0",
+                "  min_confidence: 0.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = _load_config(config_path)
+    loader = _build_price_data_provider(config)
+    assert isinstance(loader, TradingFoundationPriceLoader)
+
+    _guard_yfinance_import(monkeypatch)
+    run_first_pass_event_study(config_path)
+
+    audit = pd.read_csv(output_dir / "espp_date_audit.csv")
+    all_events = pd.read_csv(output_dir / "all_event_windows.csv")
+
+    assert audit.loc[0, "assigned_event_date"] == "2024-07-01"
+    assert bool(audit.loc[0, "included_in_event_study"]) is True
+    assert sorted(set(all_events["event_date"].astype(str))) == ["2024-07-01"]
+    assert sorted(set(all_events["ticker"])) == ["TEST"]
 
 
 def test_load_config_and_offline_pipeline_use_csv_price_provider(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

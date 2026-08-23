@@ -73,6 +73,96 @@ class CSVPriceLoader:
 
 
 @dataclass(slots=True)
+class TradingFoundationPriceLoader:
+    """Loader for canonical Trading Foundation daily EOD files."""
+
+    historical_data_root: Path
+    _dataset_cache: dict[str, pd.DataFrame] = field(default_factory=dict, init=False, repr=False)
+
+    def _resolved_root(self) -> Path:
+        if self.historical_data_root.name.lower() == "historical_data":
+            return self.historical_data_root
+        nested = self.historical_data_root / "historical_data"
+        return nested if nested.exists() else self.historical_data_root
+
+    def _symbol_path(self, ticker: str) -> Path:
+        symbol = ticker.strip().upper()
+        return self._resolved_root() / symbol / "eod" / f"{symbol}_1D.csv"
+
+    def _load_symbol_dataset(self, ticker: str) -> pd.DataFrame:
+        symbol = ticker.strip().upper()
+        cached = self._dataset_cache.get(symbol)
+        if cached is not None:
+            return cached
+
+        csv_path = self._symbol_path(symbol)
+        if not csv_path.exists():
+            raise ValueError(
+                "Trading Foundation EOD file not found for "
+                f"{symbol!r}: expected {csv_path}"
+            )
+
+        try:
+            frame = pd.read_csv(csv_path)
+        except Exception as exc:
+            raise ValueError(f"Unable to read Trading Foundation EOD data from {csv_path}: {exc}") from exc
+
+        frame = frame.rename(columns=lambda value: str(value).strip().lower().replace(" ", "_"))
+        required = {"t", "open", "high", "low", "close", "volume"}
+        missing = sorted(required.difference(frame.columns))
+        if missing:
+            raise ValueError(
+                f"Trading Foundation EOD data missing required columns {missing} in {csv_path}"
+            )
+
+        frame["t"] = pd.to_datetime(frame["t"], errors="coerce", utc=True)
+        invalid_timestamps = frame["t"].isna()
+        if invalid_timestamps.any():
+            bad_rows = sorted(set(frame.index[invalid_timestamps].tolist()))
+            raise ValueError(
+                "Trading Foundation EOD data has invalid timestamp values at rows "
+                f"{bad_rows[:5]} in {csv_path}"
+            )
+
+        frame["date"] = frame["t"].dt.tz_localize(None).dt.normalize()
+        duplicate_dates = frame["date"].duplicated(keep=False)
+        if duplicate_dates.any():
+            duplicate_values = (
+                frame.loc[duplicate_dates, "date"]
+                .dt.strftime("%Y-%m-%d")
+                .drop_duplicates()
+                .tolist()
+            )
+            raise ValueError(
+                "Trading Foundation EOD data has duplicate daily rows for "
+                f"{symbol!r} on {duplicate_values[:5]} in {csv_path}"
+            )
+
+        ordered = frame.sort_values("date", ignore_index=True).copy()
+        self._dataset_cache[symbol] = ordered
+        return ordered
+
+    def load_daily_ohlcv(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        dataset = self._load_symbol_dataset(ticker)
+        symbol = ticker.strip().upper()
+
+        start_ts = pd.Timestamp(start)
+        end_ts = pd.Timestamp(end)
+        in_range = dataset["date"].between(start_ts, end_ts)
+        frame = dataset.loc[in_range, ["date", "open", "high", "low", "close", "volume"]].copy()
+        if frame.empty:
+            available_start = dataset["date"].min().date()
+            available_end = dataset["date"].max().date()
+            raise ValueError(
+                f"Trading Foundation EOD data missing rows for ticker {symbol!r} in {start}..{end}; "
+                f"available range is {available_start}..{available_end} from {self._symbol_path(symbol)}"
+            )
+
+        frame = frame.set_index("date").sort_index()
+        return frame
+
+
+@dataclass(slots=True)
 class YFinancePriceLoader:
     """Yahoo Finance based implementation used as initial provider."""
 
@@ -109,6 +199,13 @@ def build_price_loader(price_source: str = "yfinance", price_data_path: Path | N
         if price_data_path is None:
             raise ValueError("price_data_path is required when price_source is 'csv'")
         return CSVPriceLoader(price_data_path)
+    if normalized in {"trading_foundation", "trading-foundation", "tf"}:
+        if price_data_path is None:
+            raise ValueError(
+                "price_data_path is required when price_source is 'trading_foundation' "
+                "(point it at the Trading_Foundation historical_data root or repo root)"
+            )
+        return TradingFoundationPriceLoader(price_data_path)
     if normalized in {"yfinance", "yf"}:
         return YFinancePriceLoader()
     raise ValueError(f"Unsupported price_source: {price_source!r}")
